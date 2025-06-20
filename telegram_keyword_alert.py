@@ -32,7 +32,7 @@ CONFIGS = [
         "keywords": ['ищу', 'ищем', 'ищет', 'нужна', 'нужен', 'нужно', 'кто', 'кто-нибудь'],
         "excluded_keywords": ['визаран', 'виза ран'],
         "excluded_senders": [],
-        "recipient": 419930845,
+        "recipient": 6472110264,
         "include_questions": True
     },
     {
