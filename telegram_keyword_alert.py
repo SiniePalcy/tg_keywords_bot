@@ -93,7 +93,7 @@ async def handler(event):
         )
 
         if message_link:
-            message += f"\n\n🔗 [Открыть сообщение]({message_link})"
+            message += f"\n🔗 [Открыть сообщение]({message_link})"
 
         await client.send_message(config["recipient"], message, parse_mode='markdown')
 
