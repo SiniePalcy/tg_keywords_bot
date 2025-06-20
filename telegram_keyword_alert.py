@@ -8,7 +8,6 @@ from datetime import datetime, timezone, timedelta
 from collections import deque
 from dotenv import load_dotenv
 
-
 sent_messages_cache = {}
 
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
@@ -128,16 +127,13 @@ async def clear_cache_at_midnight():
         sent_messages_cache.clear()
         print("🧹 Кэш сообщений очищен в полночь UTC", flush=True)
 
-def main():
-    loop = asyncio.get_event_loop()
+async def main():
     try:
         asyncio.create_task(clear_cache_at_midnight())
-        loop.run_until_complete(run_bot())
+        await run_bot()
     except (KeyboardInterrupt, SystemExit):
         print("⚠️ KeyboardInterrupt — shutting down...", flush=True)
-        loop.run_until_complete(shutdown())
-    finally:
-        loop.close()
+        await shutdown()
 
 
 if __name__ == '__main__':
