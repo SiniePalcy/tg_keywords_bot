@@ -1,9 +1,10 @@
-import sys
-import io
 import asyncio
-import os
+import io
 import logging
+import os
+import re
 import seqlog
+import sys
 from telethon import TelegramClient, events
 from telethon.tl.types import User
 from datetime import datetime, timezone, timedelta
@@ -53,8 +54,8 @@ async def handler(event):
         return
 
     sender_id = sender.id
-    text = event.raw_text.lower().strip()
-    message_key = (sender_id, text)
+    text = normalize_text(event.raw_text)
+    message_key = text 
     now = datetime.now(timezone.utc)
 
     for config in CONFIGS:
@@ -142,3 +143,11 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+
+def normalize_text(text: str) -> str:
+    text = text.lower().strip()
+    text = re.sub(r'\d{1,2}\.\d{1,2}', '', text)  # убираем даты типа 21.06
+    text = re.sub(r'[\(\)\[\]\{\}]', '', text)    # убираем скобки
+    text = re.sub(r'[^а-яa-z0-9 ]+', '', text)    # убираем все символы кроме букв и цифр
+    text = re.sub(r'\s+', ' ', text)              # лишние пробелы
+    return text
