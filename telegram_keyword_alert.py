@@ -1,17 +1,22 @@
 import sys
 import io
 import asyncio
+import os
 from telethon import TelegramClient, events
 from telethon.tl.types import User
 from datetime import datetime, timezone, timedelta
 from collections import deque
+from dotenv import load_dotenv
+
 
 sent_messages_cache = {}
 
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 
-api_id = 21280897
-api_hash = '*****'
+load_dotenv()
+
+api_id = int(os.getenv("API_ID"))
+api_hash = os.getenv("API_HASH")
 session_name = 'keyword_alert_notification'
 
 CONFIGS = [
