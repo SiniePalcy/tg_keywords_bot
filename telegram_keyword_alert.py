@@ -7,11 +7,10 @@ import seqlog
 from telethon import TelegramClient, events
 from telethon.tl.types import User
 from datetime import datetime, timezone, timedelta
-from collections import deque
 from dotenv import load_dotenv
 
 seqlog.log_to_seq(
-    server_url="http://localhost:5341",  # если бот и Seq на одном VPS
+    server_url="http://localhost:5341",
     api_key=None,
     level=logging.INFO
 )
@@ -52,19 +51,11 @@ async def handler(event):
     sender = await event.get_sender()
     if not isinstance(sender, User) or sender.bot:
         return
-    
+
     sender_id = sender.id
     text = event.raw_text.lower().strip()
-
+    message_key = (sender_id, text)
     now = datetime.now(timezone.utc)
-    message_key = (sender_id, text.strip())
-
-    if message_key in sent_messages_cache:
-        last_sent = sent_messages_cache[message_key]
-        if last_sent.date() == now.date():
-            return
-
-    sent_messages_cache[message_key] = now
 
     for config in CONFIGS:
         if event.chat_id not in config["chats"]:
@@ -72,6 +63,11 @@ async def handler(event):
 
         if sender_id in config.get("excluded_senders", []):
             continue
+
+        if message_key in sent_messages_cache:
+            last_sent = sent_messages_cache[message_key]
+            if last_sent.date() == now.date():
+                continue
 
         matched = any(word in text for word in config["keywords"])
         is_question = '?' in text
@@ -82,7 +78,6 @@ async def handler(event):
             continue
 
         chat = await event.get_chat()
-
         chat_title = getattr(chat, 'title', '')
         sender_name = getattr(sender, 'first_name', '')
         message_link = None
@@ -102,6 +97,9 @@ async def handler(event):
 
         await client.send_message(config["recipient"], message, parse_mode='markdown')
 
+        sent_messages_cache[message_key] = now
+
+
 async def run_bot():
     await client.start()
 
@@ -119,7 +117,7 @@ async def shutdown():
     try:
         await client.send_message(CONFIGS[0]["recipient"], f"🛑 Бот остановлен в {now}")
     except Exception as e:
-            logging.error(f"[ERROR] Failed to send stop message: {e}")
+        logging.error(f"[ERROR] Failed to send stop message: {e}")
     await client.disconnect()
 
 async def clear_cache_at_midnight():
@@ -141,7 +139,6 @@ async def main():
     except (KeyboardInterrupt, SystemExit):
         logging.info("⚠️ KeyboardInterrupt — shutting down...")
         await shutdown()
-
 
 if __name__ == '__main__':
     asyncio.run(main())
