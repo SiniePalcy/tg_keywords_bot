@@ -94,7 +94,6 @@ async def handler(event):
 
         message = (
             f"Важное сообщение в чате \"{chat_title}\":\n\n"
-            f"{sender_name}\n"
             f"{event.raw_text}"
         )
 
