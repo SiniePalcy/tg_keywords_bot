@@ -13,8 +13,7 @@ from dotenv import load_dotenv
 seqlog.log_to_seq(
     server_url="http://localhost:5341",  # если бот и Seq на одном VPS
     api_key=None,
-    level=logging.INFO,
-    auto_flush=True
+    level=logging.INFO
 )
 
 sent_messages_cache = {}
