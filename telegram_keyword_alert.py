@@ -3,7 +3,10 @@ import io
 import asyncio
 from telethon import TelegramClient, events
 from telethon.tl.types import User
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+from collections import deque
+
+sent_messages_cache = {}
 
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 
@@ -39,8 +42,18 @@ async def handler(event):
         return
     
     sender_id = sender.id
+    text = event.raw_text.lower().strip()
 
-    text = event.raw_text.lower()
+    now = datetime.now(timezone.utc)
+    message_key = (sender_id, text.strip())
+
+    if message_key in sent_messages_cache:
+        last_sent = sent_messages_cache[message_key]
+        if last_sent.date() == now.date():
+            return
+
+    sent_messages_cache[message_key] = now
+
     for config in CONFIGS:
         if event.chat_id not in config["chats"]:
             continue
@@ -68,9 +81,9 @@ async def handler(event):
         print(f"\n🔔 Chat [{chat_title}] | From {sender_name} | Message: {event.raw_text}", flush=True)
 
         message = (
-            f"🚨 Важное сообщение в чате \"{chat_title}\":\n\n"
-            f"👤 {sender_name}\n"
-            f"💬 {event.raw_text}"
+            f"Важное сообщение в чате \"{chat_title}\":\n\n"
+            f"{sender_name}\n"
+            f"{event.raw_text}"
         )
 
         if message_link:
@@ -98,10 +111,22 @@ async def shutdown():
             print(f"[ERROR] Failed to send stop message: {e}", flush=True)
     await client.disconnect()
 
+async def clear_cache_at_midnight():
+    while True:
+        now = datetime.now(timezone.utc)
+        tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        seconds_until_midnight = (tomorrow - now).total_seconds()
+
+        print(f"⏳ Очистка кэша через {int(seconds_until_midnight)} секунд", flush=True)
+        await asyncio.sleep(seconds_until_midnight)
+
+        sent_messages_cache.clear()
+        print("🧹 Кэш сообщений очищен в полночь UTC", flush=True)
 
 def main():
     loop = asyncio.get_event_loop()
     try:
+        asyncio.create_task(clear_cache_at_midnight())
         loop.run_until_complete(run_bot())
     except (KeyboardInterrupt, SystemExit):
         print("⚠️ KeyboardInterrupt — shutting down...", flush=True)
