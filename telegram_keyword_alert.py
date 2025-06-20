@@ -2,11 +2,20 @@ import sys
 import io
 import asyncio
 import os
+import logging
+import seqlog
 from telethon import TelegramClient, events
 from telethon.tl.types import User
 from datetime import datetime, timezone, timedelta
 from collections import deque
 from dotenv import load_dotenv
+
+seqlog.log_to_seq(
+    server_url="http://localhost:5341",  # если бот и Seq на одном VPS
+    api_key=None,
+    level=logging.INFO,
+    auto_flush=True
+)
 
 sent_messages_cache = {}
 
@@ -82,7 +91,7 @@ async def handler(event):
         if hasattr(chat, 'username') and chat.username:
             message_link = f"https://t.me/{chat.username}/{event.id}"
 
-        print(f"\n🔔 Chat [{chat_title}] | From {sender_name} | Message: {event.raw_text}", flush=True)
+        logging.info(f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg: {event.raw_text}")
 
         message = (
             f"Важное сообщение в чате \"{chat_title}\":\n\n"
@@ -102,8 +111,8 @@ async def run_bot():
     await client.send_message(CONFIGS[0]["recipient"], f"🚀 Бот запущен в {now}")
 
     me = await client.get_me()
-    print(f"🧾 Signed in as {me.first_name} (bot={me.bot})", flush=True)
-    print("✅ Bot is running. Waiting for messages...", flush=True)
+    logging.info(f"🧾 Signed in as {me.first_name} (bot={me.bot})")
+    logging.info("✅ Bot is running. Waiting for messages...")
 
     await client.run_until_disconnected()
 
@@ -112,7 +121,7 @@ async def shutdown():
     try:
         await client.send_message(CONFIGS[0]["recipient"], f"🛑 Бот остановлен в {now}")
     except Exception as e:
-            print(f"[ERROR] Failed to send stop message: {e}", flush=True)
+            logging.error(f"[ERROR] Failed to send stop message: {e}")
     await client.disconnect()
 
 async def clear_cache_at_midnight():
@@ -121,18 +130,18 @@ async def clear_cache_at_midnight():
         tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         seconds_until_midnight = (tomorrow - now).total_seconds()
 
-        print(f"⏳ Очистка кэша через {int(seconds_until_midnight)} секунд", flush=True)
+        logging.info(f"⏳ Clearing cache after {int(seconds_until_midnight)} seconds")
         await asyncio.sleep(seconds_until_midnight)
 
         sent_messages_cache.clear()
-        print("🧹 Кэш сообщений очищен в полночь UTC", flush=True)
+        logging.info("🧹 Message cache is cleared at midnight UTC")
 
 async def main():
     try:
         asyncio.create_task(clear_cache_at_midnight())
         await run_bot()
     except (KeyboardInterrupt, SystemExit):
-        print("⚠️ KeyboardInterrupt — shutting down...", flush=True)
+        logging.info("⚠️ KeyboardInterrupt — shutting down...")
         await shutdown()
 
 
