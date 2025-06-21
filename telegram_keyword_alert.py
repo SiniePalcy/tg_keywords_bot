@@ -47,6 +47,14 @@ CONFIGS = [
 
 client = TelegramClient(session_name, api_id, api_hash)
 
+def normalize_text(text: str) -> str:
+    text = text.lower().strip()
+    text = re.sub(r'\d{1,2}\.\d{1,2}', '', text)  # убираем даты типа 21.06
+    text = re.sub(r'[\(\)\[\]\{\}]', '', text)    # убираем скобки
+    text = re.sub(r'[^а-яa-z0-9 ]+', '', text)    # убираем все символы кроме букв и цифр
+    text = re.sub(r'\s+', ' ', text)              # лишние пробелы
+    return text
+
 @client.on(events.NewMessage)
 async def handler(event):
     sender = await event.get_sender()
@@ -143,11 +151,3 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
-
-def normalize_text(text: str) -> str:
-    text = text.lower().strip()
-    text = re.sub(r'\d{1,2}\.\d{1,2}', '', text)  # убираем даты типа 21.06
-    text = re.sub(r'[\(\)\[\]\{\}]', '', text)    # убираем скобки
-    text = re.sub(r'[^а-яa-z0-9 ]+', '', text)    # убираем все символы кроме букв и цифр
-    text = re.sub(r'\s+', ' ', text)              # лишние пробелы
-    return text
