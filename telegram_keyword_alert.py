@@ -89,6 +89,8 @@ async def handler(event):
         chat = await event.get_chat()
         chat_title = getattr(chat, 'title', '')
         sender_name = getattr(sender, 'first_name', '')
+        sender_name = getattr(sender, 'first_name', 'пользователь')
+        sender_link = f"[{sender_name}](tg://user?id={sender_id})"
         message_link = None
 
         if hasattr(chat, 'username') and chat.username:
@@ -97,7 +99,7 @@ async def handler(event):
         logging.info(f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg: {event.raw_text}")
 
         message = (
-            f"Важное сообщение в чате \"{chat_title}\":\n\n"
+            f"Важное сообщение в чате \"{chat_title}\" от {sender_link}:\n\n"
             f"{event.raw_text}"
         )
 
