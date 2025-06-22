@@ -9,14 +9,22 @@ from telethon import TelegramClient, events
 from telethon.tl.types import User
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
+from collections import defaultdict
+
+user_message_cache = defaultdict(list)
+
+def normalize_text(text: str) -> str:
+    text = text.lower().strip()
+    text = re.sub(r'[\(\)\[\]\{\}]', '', text)       # убираем скобки
+    text = re.sub(r'[^а-яa-z0-9 ]+', '', text)       # убираем всё кроме букв и цифр
+    text = re.sub(r'\s+', ' ', text)                 # лишние пробелы
+    return text
 
 seqlog.log_to_seq(
     server_url="http://localhost:5341",
     api_key=None,
     level=logging.INFO
 )
-
-sent_messages_cache = {}
 
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
 
@@ -49,11 +57,14 @@ client = TelegramClient(session_name, api_id, api_hash)
 
 def normalize_text(text: str) -> str:
     text = text.lower().strip()
-    text = re.sub(r'\d{1,2}\.\d{1,2}', '', text)  # убираем даты типа 21.06
     text = re.sub(r'[\(\)\[\]\{\}]', '', text)    # убираем скобки
     text = re.sub(r'[^а-яa-z0-9 ]+', '', text)    # убираем все символы кроме букв и цифр
     text = re.sub(r'\s+', ' ', text)              # лишние пробелы
     return text
+
+def add_to_user_cache(user_id: int, raw_text: str):
+    normalized = normalize_text(raw_text)
+    user_message_cache[user_id].append(normalized)
 
 @client.on(events.NewMessage)
 async def handler(event):
@@ -63,8 +74,6 @@ async def handler(event):
 
     sender_id = sender.id
     text = normalize_text(event.raw_text)
-    message_key = text 
-    now = datetime.now(timezone.utc)
 
     for config in CONFIGS:
         if event.chat_id not in config["chats"]:
@@ -73,10 +82,9 @@ async def handler(event):
         if sender_id in config.get("excluded_senders", []):
             continue
 
-        if message_key in sent_messages_cache:
-            last_sent = sent_messages_cache[message_key]
-            if last_sent.date() == now.date():
-                continue
+        if text in user_message_cache[sender_id]:
+            logging.info(f"⛔ Повтор от пользователя {sender_id}: {text}")
+            continue
 
         matched = any(word in text for word in config["keywords"])
         is_question = '?' in text
@@ -88,7 +96,6 @@ async def handler(event):
 
         chat = await event.get_chat()
         chat_title = getattr(chat, 'title', '')
-        sender_name = getattr(sender, 'first_name', '')
         sender_name = getattr(sender, 'first_name', 'пользователь')
         sender_link = f"[{sender_name}](tg://user?id={sender_id})"
         message_link = None
@@ -108,7 +115,7 @@ async def handler(event):
 
         await client.send_message(config["recipient"], message, parse_mode='markdown')
 
-        sent_messages_cache[message_key] = now
+        add_to_user_cache(sender_id, text)
 
 
 async def run_bot():
@@ -140,7 +147,7 @@ async def clear_cache_at_midnight():
         logging.info(f"⏳ Clearing cache after {int(seconds_until_midnight)} seconds")
         await asyncio.sleep(seconds_until_midnight)
 
-        sent_messages_cache.clear()
+        user_message_cache.clear()
         logging.info("🧹 Message cache is cleared at midnight UTC")
 
 async def main():
