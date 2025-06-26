@@ -42,14 +42,6 @@ CONFIGS = [
         "excluded_senders": [],
         "recipient": 6472110264,
         "include_questions": True
-    },
-    {
-        "chats": { -1001211521747, -1001609324023 },
-        "keywords": ['пианино', 'синтезатор'],
-        "excluded_keywords": [],
-        "excluded_senders": [7176393076],
-        "recipient": 418176416,
-        "include_questions": False
     }
 ]
 
@@ -105,14 +97,17 @@ async def handler(event):
 
         logging.info(f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg: {event.raw_text}")
 
+        now = datetime.now().strftime("%H:%M:%S")
+
         message = (
-            f"Важное сообщение в чате \"{chat_title}\" от {sender_link}:\n\n"
+            f"Cообщение в чате \"{chat_title}\" от {sender_link} в {now}:\n\n"
             f"{event.raw_text}"
         )
 
         if message_link:
             message += f"\n🔗 [Открыть сообщение]({message_link})"
 
+        await asyncio.sleep(1)
         await client.send_message(config["recipient"], message, parse_mode='markdown')
 
         add_to_user_cache(sender_id, text)
@@ -122,7 +117,7 @@ async def run_bot():
     await client.start()
 
     now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-    await client.send_message(CONFIGS[0]["recipient"], f"🚀 Бот запущен в {now}")
+    logging.info(f"🧾 Bot run at {now}")
 
     me = await client.get_me()
     logging.info(f"🧾 Signed in as {me.first_name} (bot={me.bot})")
@@ -132,10 +127,7 @@ async def run_bot():
 
 async def shutdown():
     now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-    try:
-        await client.send_message(CONFIGS[0]["recipient"], f"🛑 Бот остановлен в {now}")
-    except Exception as e:
-        logging.error(f"[ERROR] Failed to send stop message: {e}")
+    logging.info(f"🧾 Bot stopped at {now}")
     await client.disconnect()
 
 async def clear_cache_at_midnight():
