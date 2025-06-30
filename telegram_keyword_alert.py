@@ -5,6 +5,8 @@ import os
 import re
 import seqlog
 import sys
+import openai
+import numpy as np
 from telethon import TelegramClient, events
 from telethon.tl.types import User
 from datetime import datetime, timezone, timedelta
@@ -33,6 +35,7 @@ load_dotenv()
 api_id = int(os.getenv("API_ID"))
 api_hash = os.getenv("API_HASH")
 session_name = 'keyword_alert_notification'
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 CONFIGS = [
     {
@@ -45,6 +48,8 @@ CONFIGS = [
     }
 ]
 
+PERIOD_MINUTES = 5
+
 client = TelegramClient(session_name, api_id, api_hash)
 
 def normalize_text(text: str) -> str:
@@ -56,7 +61,34 @@ def normalize_text(text: str) -> str:
 
 def add_to_user_cache(user_id: int, raw_text: str):
     normalized = normalize_text(raw_text)
-    user_message_cache[user_id].append(normalized)
+    now = datetime.now()
+    user_message_cache[user_id].append((normalized, now))
+
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+async def is_semantically_duplicate(user_id, text: str) -> bool:
+    try:
+        response = await openai.Embedding.acreate(
+            input=[text],
+            model="text-embedding-3-small"
+        )
+        new_embedding = response["data"][0]["embedding"]
+
+        for prev in user_message_cache[user_id]:
+            prev_response = await openai.Embedding.acreate(
+                input=[prev],
+                model="text-embedding-3-small"
+            )
+            prev_embedding = prev_response["data"][0]["embedding"]
+            sim = cosine_similarity(new_embedding, prev_embedding)
+            if sim > 0.9:  # порог можно подбирать
+                logging.info(f"🔁 Семантический дубликат от пользователя {user_id}")
+                return True
+    except Exception as e:
+        logging.warning(f"Ошибка при семантическом сравнении: {e}")
+    return False
+
 
 @client.on(events.NewMessage)
 async def handler(event):
@@ -84,6 +116,17 @@ async def handler(event):
             continue
 
         if any(block_word in text for block_word in config.get("excluded_keywords", [])):
+            logging.info(f"⛔ Игнор по слову для пользователя {sender_id}: {text}")
+            continue
+
+        now = datetime.now().strftime("%H:%M:%S")
+        recent_messages = user_message_cache[sender_id]
+        if any((now - ts) < timedelta(minutes=PERIOD_MINUTES) for _, ts in recent_messages):
+            logging.info(f"⏱️ Игнор: пользователь {sender_id} уже писал за последние 5 минут")
+            continue
+
+        if await is_semantically_duplicate(sender_id, text):
+            logging.info(f"⏱️ Игнор: пользователь {sender_id} уже писал об этом")
             continue
 
         chat = await event.get_chat()
@@ -97,8 +140,6 @@ async def handler(event):
 
         logging.info(f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg: {event.raw_text}")
 
-        now = datetime.now().strftime("%H:%M:%S")
-
         message = (
             f"Cообщение в чате \"{chat_title}\" от {sender_link} в {now}:\n\n"
             f"{event.raw_text}"
@@ -109,6 +150,7 @@ async def handler(event):
 
         await asyncio.sleep(1)
         await client.send_message(config["recipient"], message, parse_mode='markdown')
+        logging.info(f"Message sent: {message} | Sender: {sender_name} | Recipient: {config["recipient"]}");
 
         add_to_user_cache(sender_id, text)
 
