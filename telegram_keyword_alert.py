@@ -52,6 +52,8 @@ PERIOD_MINUTES = 5
 
 client = TelegramClient(session_name, api_id, api_hash)
 
+openAIclient = openai.AsyncOpenAI()
+
 def normalize_text(text: str) -> str:
     text = text.lower().strip()
     text = re.sub(r'[\(\)\[\]\{\}]', '', text)    
@@ -67,28 +69,26 @@ def add_to_user_cache(user_id: int, raw_text: str):
 def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
+async def get_embedding(text: str) -> list[float]:
+    response = await openAIclient.embeddings.create(
+        input=text,
+        model="text-embedding-3-small"
+    )
+    return response.data[0].embedding
+
 async def is_semantically_duplicate(user_id, text: str) -> bool:
     try:
-        response = await openai.Embedding.acreate(
-            input=[text],
-            model="text-embedding-3-small"
-        )
-        new_embedding = response["data"][0]["embedding"]
+        new_embedding = await get_embedding(text)
 
-        for prev, _ in user_message_cache[user_id]:
-            prev_response = await openai.Embedding.acreate(
-                input=[prev],
-                model="text-embedding-3-small"
-            )
-            prev_embedding = prev_response["data"][0]["embedding"]
+        for prev_text, _ in user_message_cache[user_id]:
+            prev_embedding = await get_embedding(prev_text)
             sim = cosine_similarity(new_embedding, prev_embedding)
-            if sim > 0.9:  # порог можно подбирать
+            if sim > 0.9:
                 logging.info(f"🔁 Семантический дубликат от пользователя {user_id}")
                 return True
     except Exception as e:
         logging.warning(f"Ошибка при семантическом сравнении: {e}")
     return False
-
 
 @client.on(events.NewMessage)
 async def handler(event):
