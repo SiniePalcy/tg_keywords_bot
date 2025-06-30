@@ -15,9 +15,9 @@ user_message_cache = defaultdict(list)
 
 def normalize_text(text: str) -> str:
     text = text.lower().strip()
-    text = re.sub(r'[\(\)\[\]\{\}]', '', text)       # убираем скобки
-    text = re.sub(r'[^а-яa-z0-9 ]+', '', text)       # убираем всё кроме букв и цифр
-    text = re.sub(r'\s+', ' ', text)                 # лишние пробелы
+    text = re.sub(r'[\(\)\[\]\{\}]', '', text)       
+    text = re.sub(r'[^а-яa-z0-9 ]+', '', text)       
+    text = re.sub(r'\s+', ' ', text)                 
     return text
 
 seqlog.log_to_seq(
@@ -40,7 +40,7 @@ CONFIGS = [
         "keywords": ['ищу', 'ищем', 'ищет', 'нужна', 'нужен', 'нужно', 'кто', 'кто-нибудь'],
         "excluded_keywords": ['визаран', 'виза ран'],
         "excluded_senders": [],
-        "recipient": 6472110264,
+        "recipient": 1742604792,
         "include_questions": True
     }
 ]
@@ -49,9 +49,9 @@ client = TelegramClient(session_name, api_id, api_hash)
 
 def normalize_text(text: str) -> str:
     text = text.lower().strip()
-    text = re.sub(r'[\(\)\[\]\{\}]', '', text)    # убираем скобки
-    text = re.sub(r'[^а-яa-z0-9 ]+', '', text)    # убираем все символы кроме букв и цифр
-    text = re.sub(r'\s+', ' ', text)              # лишние пробелы
+    text = re.sub(r'[\(\)\[\]\{\}]', '', text)    
+    text = re.sub(r'[^а-яa-z0-9 ]+', '', text)   
+    text = re.sub(r'\s+', ' ', text)              
     return text
 
 def add_to_user_cache(user_id: int, raw_text: str):
