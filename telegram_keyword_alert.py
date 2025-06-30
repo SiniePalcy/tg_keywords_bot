@@ -37,6 +37,8 @@ api_hash = os.getenv("API_HASH")
 session_name = 'keyword_alert_notification'
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+ENABLE_SEMANTIC_FILTER = os.getenv("ENABLE_SEMANTIC_FILTER", "False").lower() == "true"
+
 CONFIGS = [
     {
         "chats": {-1001954706166, -1001676333024, -1001214960694, -1001850398389},
@@ -125,7 +127,7 @@ async def handler(event):
             logging.info(f"⏱️ Игнор: пользователь {sender_id} уже писал за последние 5 минут")
             continue
 
-        if await is_semantically_duplicate(sender_id, text):
+        if ENABLE_SEMANTIC_FILTER and await is_semantically_duplicate(sender_id, text):
             logging.info(f"⏱️ Игнор: пользователь {sender_id} уже писал об этом")
             continue
 
