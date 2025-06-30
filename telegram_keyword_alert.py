@@ -75,7 +75,7 @@ async def is_semantically_duplicate(user_id, text: str) -> bool:
         )
         new_embedding = response["data"][0]["embedding"]
 
-        for prev in user_message_cache[user_id]:
+        for prev, _ in user_message_cache[user_id]:
             prev_response = await openai.Embedding.acreate(
                 input=[prev],
                 model="text-embedding-3-small"
@@ -106,7 +106,8 @@ async def handler(event):
         if sender_id in config.get("excluded_senders", []):
             continue
 
-        if text in user_message_cache[sender_id]:
+        recent_messages = user_message_cache[sender_id]
+        if any(prev_text == text for prev_text, _ in recent_messages):
             logging.info(f"⛔ Повтор от пользователя {sender_id}: {text}")
             continue
 
@@ -119,8 +120,7 @@ async def handler(event):
             logging.info(f"⛔ Игнор по слову для пользователя {sender_id}: {text}")
             continue
 
-        now = datetime.now().strftime("%H:%M:%S")
-        recent_messages = user_message_cache[sender_id]
+        now = datetime.now()
         if any((now - ts) < timedelta(minutes=PERIOD_MINUTES) for _, ts in recent_messages):
             logging.info(f"⏱️ Игнор: пользователь {sender_id} уже писал за последние 5 минут")
             continue
@@ -141,7 +141,7 @@ async def handler(event):
         logging.info(f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg: {event.raw_text}")
 
         message = (
-            f"Cообщение в чате \"{chat_title}\" от {sender_link} в {now}:\n\n"
+            f"Cообщение в чате \"{chat_title}\" от {sender_link} в {now.strftime("%H:%M:%S")}:\n\n"
             f"{event.raw_text}"
         )
 

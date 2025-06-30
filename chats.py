@@ -1,10 +1,13 @@
-
 import sys
 import io
+import os
 from telethon import TelegramClient
+from dotenv import load_dotenv
 
-api_id = 21280897
-api_hash = '*****'
+load_dotenv()
+
+api_id = int(os.getenv("API_ID"))
+api_hash = os.getenv("API_HASH")
 session_name = 'list_chats'
 
 sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
