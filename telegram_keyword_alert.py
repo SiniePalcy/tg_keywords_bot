@@ -138,7 +138,7 @@ async def handler(event):
             continue
 
         if ENABLE_SEMANTIC_FILTER and await is_semantically_duplicate(sender_id, text):
-            logging.info(f"⏱️ Игнор: пользователь {sender_id} уже писал об этом")
+            logging.info(f"⛔ Игнор: пользователь {sender_id} уже писал об этом")
             continue
 
         chat = await event.get_chat()
