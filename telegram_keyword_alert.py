@@ -8,19 +8,14 @@ import sys
 import openai
 import numpy as np
 from telethon import TelegramClient, events
+from telethon.errors import PeerFloodError
 from telethon.tl.types import User
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from collections import defaultdict
 
 user_message_cache = defaultdict(list)
-
-def normalize_text(text: str) -> str:
-    text = text.lower().strip()
-    text = re.sub(r'[\(\)\[\]\{\}]', '', text)       
-    text = re.sub(r'[^а-яa-z0-9 ]+', '', text)       
-    text = re.sub(r'\s+', ' ', text)                 
-    return text
+last_sent = {}
 
 seqlog.log_to_seq(
     server_url="http://localhost:5341",
@@ -38,6 +33,8 @@ session_name = 'keyword_alert_notification'
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 ENABLE_SEMANTIC_FILTER = os.getenv("ENABLE_SEMANTIC_FILTER", "False").lower() == "true"
+DELAY_BETWEEN_MESSAGES = 5
+DELAY_TOO_MANY_REQUESTS = 120
 
 CONFIGS = [
     {
@@ -91,6 +88,19 @@ async def is_semantically_duplicate(user_id, text: str) -> bool:
     except Exception as e:
         logging.warning(f"Ошибка при семантическом сравнении: {e}")
     return False
+
+async def send_message_safe(recipient, message):
+    now = datetime.now()
+    if recipient in last_sent and now - last_sent[recipient] < timedelta(seconds=60):
+        print(f"Too soon to message {recipient}")
+        return
+
+    try:
+        await client.send_message(recipient, message, parse_mode='markdown')
+        last_sent[recipient] = now
+    except PeerFloodError:
+        print("Hit PeerFloodError — backing off")
+        await asyncio.sleep(DELAY_TOO_MANY_REQUESTS) 
 
 @client.on(events.NewMessage)
 async def handler(event):
@@ -150,8 +160,8 @@ async def handler(event):
         if message_link:
             message += f"\n🔗 [Открыть сообщение]({message_link})"
 
-        await asyncio.sleep(1)
-        await client.send_message(config["recipient"], message, parse_mode='markdown')
+        await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
+        await send_message_safe(config["recipient"], message)
         logging.info(f"Message sent: {message} | Sender: {sender_name} | Recipient: {config["recipient"]}");
 
         add_to_user_cache(sender_id, text)
