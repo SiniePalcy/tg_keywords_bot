@@ -13,6 +13,7 @@ from telethon.tl.types import User
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from collections import defaultdict
+from zoneinfo import ZoneInfo
 
 user_message_cache = defaultdict(list)
 last_sent = {}
@@ -42,7 +43,7 @@ CONFIGS = [
         "keywords": ['ищу', 'ищем', 'ищет', 'нужна', 'нужен', 'нужно', 'кто', 'кто-нибудь'],
         "excluded_keywords": [
             'визаран', 'виза ран', 'визоран', 'визо ран', 
-            'доход', 'подработка', 
+            'доход', 'подработка', "удаленный", "удаленно", "удаленная", "работа", "занятость", "шкипер"
             'тирана', 'тираны', 'тирану', 
             'дубровник', 'дубровника', 
             'требинье',
@@ -51,7 +52,7 @@ CONFIGS = [
             'албания', 'албанию', 'албании',
             'хорватия', 'хорватию', 'хорватии',
             'сербия', 'сербию', 'сербии',
-            'херцег-нови', 'херцегнови', 'херцег нови','герцег-нови', 'герцегнови', 'герцег нови', 'херцог нови', 'герцог нови'
+            'херцег-нови', 'херцегнови', 'херцег','герцег', 'герцегнови', 'херцог', 'герцог'
         ],
         "excluded_senders": [],
         "recipient": 6472110264,
@@ -80,9 +81,12 @@ def normalize_text(text: str) -> str:
     text = re.sub(r'\s+', ' ', text)              
     return text
 
+def getnow():
+    return datetime.now(ZoneInfo("Etc/GMT-2"))
+
 def add_to_user_cache(user_id: int, raw_text: str):
     normalized = normalize_text(raw_text)
-    now = datetime.now()
+    now = getnow()
     user_message_cache[user_id].append((normalized, now))
 
 def cosine_similarity(a, b):
@@ -110,7 +114,7 @@ async def is_semantically_duplicate(user_id, text: str) -> bool:
     return False
 
 async def send_message_safe(recipient, message):
-    now = datetime.now()
+    now = getnow()
     if recipient in last_sent and now - last_sent[recipient] < timedelta(seconds=60):
         print(f"Too soon to message {recipient}")
         return
@@ -152,7 +156,7 @@ async def handler(event):
             logging.info(f"⛔ Игнор по слову для пользователя {sender_id}: {text}")
             continue
 
-        now = datetime.now()
+        now = getnow()
         if any((now - ts) < timedelta(minutes=PERIOD_MINUTES) for _, ts in recent_messages):
             logging.info(f"⏱️ Игнор: пользователь {sender_id} уже писал за последние 5 минут")
             continue
@@ -190,7 +194,7 @@ async def handler(event):
 async def run_bot():
     await client.start()
 
-    now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    now = getnow().strftime("%d-%m-%Y %H:%M:%S")
     logging.info(f"🧾 Bot run at {now}")
 
     me = await client.get_me()
@@ -200,13 +204,13 @@ async def run_bot():
     await client.run_until_disconnected()
 
 async def shutdown():
-    now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    now = getnow().strftime("%d-%m-%Y %H:%M:%S")
     logging.info(f"🧾 Bot stopped at {now}")
     await client.disconnect()
 
 async def clear_cache_at_midnight():
     while True:
-        now = datetime.now(timezone.utc)
+        now = getnow()
         tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         seconds_until_midnight = (tomorrow - now).total_seconds()
 
