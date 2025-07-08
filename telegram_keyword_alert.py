@@ -61,7 +61,7 @@ CONFIGS = [
         {
         "chats": { -1001211521747, -1001609324023 },
         "keywords": ['кровать', 'кресло', 'ковер', 'ковёр'],
-        "excluded_keywords": [],
+        "excluded_keywords": ['автокресло'],
         "excluded_senders": [7176393076],
         "recipient": 418176416,
         "include_questions": False
