@@ -24,13 +24,13 @@ jobs:
         pip install -r requirements-dev.txt
 
     - name: Run flake8 (code style)
-      run: flake8 bot/
+      run: flake8 .
 
     - name: Run mypy (type checks)
-      run: mypy bot/
+      run: mypy .
 
     - name: Check formatting with black
-      run: black --check bot/
+      run: black --check .
 
     - name: Set up SSH
       run: |
