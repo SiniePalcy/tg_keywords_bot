@@ -177,7 +177,7 @@ async def handler(event):
         logging.info(f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg: {event.raw_text}")
 
         message = (
-            f"Cообщение в чате \"{chat_title}\" от {sender_link} в {now.strftime("%H:%M:%S")}:\n\n"
+            f"Cообщение в чате \"{chat_title}\" от {sender_link} в {now.strftime('%H:%M:%S')}:\n\n"
             f"{event.raw_text}"
         )
 
