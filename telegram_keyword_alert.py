@@ -34,7 +34,7 @@ session_name = 'keyword_alert_notification'
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 ENABLE_SEMANTIC_FILTER = os.getenv("ENABLE_SEMANTIC_FILTER", "False").lower() == "true"
-DELAY_BETWEEN_MESSAGES = 5
+DELAY_BETWEEN_MESSAGES = 1
 DELAY_TOO_MANY_REQUESTS = 120
 
 CONFIGS = [
