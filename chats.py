@@ -10,9 +10,6 @@ api_id = int(os.getenv("API_ID"))
 api_hash = os.getenv("API_HASH")
 session_name = 'list_chats'
 
-sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
-
-
 client = TelegramClient(session_name, api_id, api_hash)
 
 

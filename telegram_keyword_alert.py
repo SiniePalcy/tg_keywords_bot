@@ -16,7 +16,7 @@ from collections import defaultdict
 from zoneinfo import ZoneInfo
 
 user_message_cache = defaultdict(list)
-last_sent = {}
+last_sent: Dict[int, datetime] = {}
 
 seqlog.log_to_seq(
     server_url="http://localhost:5341",
@@ -24,11 +24,12 @@ seqlog.log_to_seq(
     level=logging.INFO
 )
 
-sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
-
 load_dotenv()
 
-api_id = int(os.getenv("API_ID"))
+api_id_str = os.getenv("API_ID")
+if api_id_str is None:
+    raise ValueError("API_ID not set")
+api_id = int(api_id_str)
 api_hash = os.getenv("API_HASH")
 session_name = 'keyword_alert_notification'
 openai.api_key = os.getenv("OPENAI_API_KEY")
