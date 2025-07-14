@@ -74,6 +74,7 @@ client = TelegramClient(session_name, api_id, api_hash)
 
 openAIclient = openai.AsyncOpenAI()
 
+
 def normalize_text(text: str) -> str:
     text = text.lower().strip()
     text = re.sub(r'[\(\)\[\]\{\}]', '', text)
@@ -81,16 +82,20 @@ def normalize_text(text: str) -> str:
     text = re.sub(r'\s+', ' ', text)
     return text
 
+
 def getnow():
     return datetime.now(ZoneInfo("Etc/GMT-2"))
+
 
 def add_to_user_cache(user_id: int, raw_text: str):
     normalized = normalize_text(raw_text)
     now = getnow()
     user_message_cache[user_id].append((normalized, now))
 
+
 def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
 
 async def get_embedding(text: str) -> list[float]:
     response = await openAIclient.embeddings.create(
@@ -98,6 +103,7 @@ async def get_embedding(text: str) -> list[float]:
         model="text-embedding-3-small"
     )
     return response.data[0].embedding
+
 
 async def is_semantically_duplicate(user_id, text: str) -> bool:
     try:
@@ -114,6 +120,7 @@ async def is_semantically_duplicate(user_id, text: str) -> bool:
         logging.warning(f"Ошибка при семантическом сравнении: {e}")
     return False
 
+
 async def send_message_safe(recipient, message):
     now = getnow()
     if recipient in last_sent and now - last_sent[recipient] < timedelta(seconds=60):
@@ -127,8 +134,8 @@ async def send_message_safe(recipient, message):
         print("Hit PeerFloodError — backing off")
         await asyncio.sleep(DELAY_TOO_MANY_REQUESTS)
 
-@client.on(events.NewMessage)
 
+@client.on(events.NewMessage)
 async def handler(event):
     sender = await event.get_sender()
     if not isinstance(sender, User) or sender.bot:
@@ -210,10 +217,12 @@ async def run_bot():
 
     await client.run_until_disconnected()
 
+
 async def shutdown():
     now = getnow().strftime("%d-%m-%Y %H:%M:%S")
     logging.info(f"🧾 Bot stopped at {now}")
     await client.disconnect()
+
 
 async def clear_cache_at_midnight():
     while True:
@@ -227,6 +236,7 @@ async def clear_cache_at_midnight():
 
         user_message_cache.clear()
         logging.info("🧹 Message cache is cleared at midnight UTC")
+
 
 async def main():
     try:
