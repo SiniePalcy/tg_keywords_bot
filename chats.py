@@ -1,5 +1,3 @@
-import sys
-import io
 import os
 from telethon import TelegramClient
 from dotenv import load_dotenv

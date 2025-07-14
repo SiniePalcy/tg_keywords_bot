@@ -1,10 +1,8 @@
 import asyncio
-import io
 import logging
 import os
 import re
 import seqlog
-import sys
 import openai
 import numpy as np
 from telethon import TelegramClient, events
@@ -16,7 +14,7 @@ from collections import defaultdict
 from zoneinfo import ZoneInfo
 
 user_message_cache = defaultdict(list)
-last_sent: Dict[int, datetime] = {}
+last_sent: dict[int, datetime] = {}
 
 seqlog.log_to_seq(
     server_url="http://localhost:5341",
