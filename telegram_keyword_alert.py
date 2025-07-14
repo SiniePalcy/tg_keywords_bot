@@ -162,7 +162,8 @@ async def handler(event: events.NewMessage.Event) -> None:
         if not (matched or (config.get("include_questions") and is_question)):
             continue
 
-        if any(block_word in text for block_word in config.get("excluded_keywords", [])):
+        excluded_keywords = config.get("excluded_keywords", [])
+        if isinstance(excluded_keywords, list) and any(block_word in text for block_word in excluded_keywords):
             logging.info(f"⛔ Игнор по слову для пользователя {sender_id}:{text}")
             continue
 
