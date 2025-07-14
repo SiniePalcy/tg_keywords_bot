@@ -7,7 +7,6 @@ import openai
 import numpy as np
 from telethon import TelegramClient, events
 from telethon.errors import PeerFloodError
-from telethon.tl.custom.message import Message
 from telethon.tl.types import User
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -97,20 +96,20 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 
-async def get_embedding(text: str) -> list[float]:
+async def get_embedding(text: str) -> np.ndarray:
     response = await openAIclient.embeddings.create(
         input=text,
         model="text-embedding-3-small"
     )
-    return response.data[0].embedding
+    return np.array(response.data[0].embedding)
 
 
 async def is_semantically_duplicate(user_id: int, text: str) -> bool:
     try:
-        new_embedding = await get_embedding(text)
+        new_embedding = np.array(await get_embedding(text))
 
         for prev_text, _ in user_message_cache[user_id]:
-            prev_embedding = await get_embedding(prev_text)
+            prev_embedding = np.array(await get_embedding(prev_text))
             sim = cosine_similarity(new_embedding, prev_embedding)
             if sim > 0.9:
                 logging.info(f"🔁 Семантический дубликат от пользователя {user_id}")
@@ -135,7 +134,7 @@ async def send_message_safe(recipient: int, message: str) -> None:
 
 
 @client.on(events.NewMessage)
-async def handler(event: Message) -> None:
+async def handler(event: events.NewMessage.Event) -> None:
     sender = await event.get_sender()
     if not isinstance(sender, User) or sender.bot:
         return
@@ -143,11 +142,12 @@ async def handler(event: Message) -> None:
     sender_id = sender.id
     text = normalize_text(event.raw_text)
 
+    config: dict[str, object]
     for config in CONFIGS:
-        if event.chat_id not in config["chats"]:
+        if isinstance(config['chats'], set) and event.chat_id not in config['chats']:
             continue
 
-        if sender_id in config.get("excluded_senders", []):
+        if isinstance(config.get('excluded_senders', []), list) and sender_id in config.get('excluded_senders', []):
             continue
 
         recent_messages = user_message_cache[sender_id]
@@ -193,7 +193,8 @@ async def handler(event: Message) -> None:
             message += f"\n🔗 [Открыть сообщение]({message_link})"
 
         await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
-        await send_message_safe(config["recipient"], message)
+        if isinstance(config['recipient'], int):
+            await send_message_safe(config['recipient'], message)
         logging.info(f"Message sent: {message} | Sender: {sender_name} | Recipient: {config['recipient']}")
 
         add_to_user_cache(sender_id, text)
