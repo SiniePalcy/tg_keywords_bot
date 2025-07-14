@@ -146,7 +146,7 @@ async def handler(event: events.NewMessage.Event) -> None:
     for config in CONFIGS:
         if isinstance(config['chats'], set) and event.chat_id not in config['chats']:
             continue
-        
+
         excluded_senders = config.get("excluded_senders", [])
         if isinstance(excluded_senders, list) and sender_id in excluded_senders:
             continue
