@@ -186,7 +186,7 @@ async def handler(event):
 
         await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
         await send_message_safe(config["recipient"], message)
-        logging.info(f"Message sent: {message} | Sender: {sender_name} | Recipient: {config["recipient"]}");
+        logging.info(f"Message sent: {message} | Sender: {sender_name} | Recipient: {config['recipient']}");
 
         add_to_user_cache(sender_id, text)
 
