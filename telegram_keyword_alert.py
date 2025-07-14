@@ -96,7 +96,7 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 
-async def get_embedding(text: str) -> list[float]:
+async def get_embedding(text: str) -> np.ndarray:
     response = await openAIclient.embeddings.create(
         input=text,
         model="text-embedding-3-small"
