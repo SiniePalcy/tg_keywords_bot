@@ -7,6 +7,7 @@ import openai
 import numpy as np
 from telethon import TelegramClient, events
 from telethon.errors import PeerFloodError
+from telethon.tl.custom.message import Message
 from telethon.tl.types import User
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -96,7 +97,7 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 
-async def get_embedding(text: str) -> np.ndarray:
+async def get_embedding(text: str) -> list[float]:
     response = await openAIclient.embeddings.create(
         input=text,
         model="text-embedding-3-small"
@@ -134,7 +135,7 @@ async def send_message_safe(recipient: int, message: str) -> None:
 
 
 @client.on(events.NewMessage)
-async def handler(event):
+async def handler(event: Message) -> None:
     sender = await event.get_sender()
     if not isinstance(sender, User) or sender.bot:
         return
