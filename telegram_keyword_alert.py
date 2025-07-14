@@ -47,7 +47,7 @@ CONFIGS = [
             'тирана', 'тираны', 'тирану',
             'дубровник', 'дубровника',
             'требинье',
-            'босния', 'боснии', 'боснию', 
+            'босния', 'боснии', 'боснию',
             'белград', 'белграда',
             'албания', 'албанию', 'албании',
             'хорватия', 'хорватию', 'хорватии',
@@ -107,7 +107,8 @@ async def is_semantically_duplicate(user_id, text: str) -> bool:
             prev_embedding = await get_embedding(prev_text)
             sim = cosine_similarity(new_embedding, prev_embedding)
             if sim > 0.9:
-                logging.info(f"🔁 Семантический дубликат от пользователя {user_id}")
+                logging.info(f"🔁 Семантический дубликат от пользователя"
+                f"{user_id}")
                 return True
     except Exception as e:
         logging.warning(f"Ошибка при семантическом сравнении: {e}")
@@ -127,6 +128,7 @@ async def send_message_safe(recipient, message):
         await asyncio.sleep(DELAY_TOO_MANY_REQUESTS)
 
 @client.on(events.NewMessage)
+
 async def handler(event):
     sender = await event.get_sender()
     if not isinstance(sender, User) or sender.bot:
@@ -153,16 +155,19 @@ async def handler(event):
             continue
 
         if any(block_word in text for block_word in config.get("excluded_keywords", [])):
-            logging.info(f"⛔ Игнор по слову для пользователя {sender_id}: {text}")
+            logging.info(f"⛔ Игнор по слову для пользователя {sender_id}:"
+            f"{text}")
             continue
 
         now = getnow()
         if any((now - ts) < timedelta(minutes=PERIOD_MINUTES) for _, ts in recent_messages):
-            logging.info(f"⏱️ Игнор: пользователь {sender_id} уже писал за последние 5 минут")
+            logging.info(f"⏱️ Игнор: пользователь {sender_id} уже писал за"
+            f"последние 5 минут")
             continue
 
         if ENABLE_SEMANTIC_FILTER and await is_semantically_duplicate(sender_id, text):
-            logging.info(f"⛔ Игнор: пользователь {sender_id} уже писал об этом")
+            logging.info(f"⛔ Игнор: пользователь {sender_id} уже писал об"
+            f"этом")
             continue
 
         chat = await event.get_chat()
@@ -174,7 +179,8 @@ async def handler(event):
         if hasattr(chat, 'username') and chat.username:
             message_link = f"https://t.me/{chat.username}/{event.id}"
 
-        logging.info(f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg: {event.raw_text}")
+        logging.info(f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg:"
+        f"{event.raw_text}")
 
         message = (
             f"Cообщение в чате \"{chat_title}\" от {sender_link} в {now.strftime('%H:%M:%S')}:\n\n"
@@ -186,7 +192,8 @@ async def handler(event):
 
         await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
         await send_message_safe(config["recipient"], message)
-        logging.info(f"Message sent: {message} | Sender: {sender_name} | Recipient: {config['recipient']}")
+        logging.info(f"Message sent: {message} | Sender: {sender_name} |"
+        f"Recipient: {config['recipient']}")
 
         add_to_user_cache(sender_id, text)
 
@@ -214,7 +221,8 @@ async def clear_cache_at_midnight():
         tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         seconds_until_midnight = (tomorrow - now).total_seconds()
 
-        logging.info(f"⏳ Clearing cache after {int(seconds_until_midnight)} seconds")
+        logging.info(f"⏳ Clearing cache after {int(seconds_until_midnight)}"
+        f"seconds")
         await asyncio.sleep(seconds_until_midnight)
 
         user_message_cache.clear()
