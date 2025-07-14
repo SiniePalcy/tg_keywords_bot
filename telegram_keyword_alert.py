@@ -156,7 +156,8 @@ async def handler(event: events.NewMessage.Event) -> None:
             logging.info(f"⛔ Повтор от пользователя {sender_id}: {text}")
             continue
 
-        matched = any(word in text for word in config["keywords"])
+        keywords = config.get("keywords", [])
+        matched = any(word in text for word in keywords) if isinstance(keywords, list) else False
         is_question = '?' in text
         if not (matched or (config.get("include_questions") and is_question)):
             continue
