@@ -10,7 +10,7 @@ import numpy as np
 from telethon import TelegramClient, events
 from telethon.errors import PeerFloodError
 from telethon.tl.types import User
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from collections import defaultdict
 from zoneinfo import ZoneInfo
@@ -42,30 +42,30 @@ CONFIGS = [
         "chats": {-1001954706166, -1001676333024, -1001214960694, -1001850398389},
         "keywords": ['ищу', 'ищем', 'ищет', 'нужна', 'нужен', 'нужно', 'кто', 'кто-нибудь'],
         "excluded_keywords": [
-            'визаран', 'виза ран', 'визоран', 'визо ран', 
+            'визаран', 'виза ран', 'визоран', 'визо ран',
             'доход', 'подработка', "удаленный", "удаленно", "удаленная", "работа", "занятость", "шкипер"
-            'тирана', 'тираны', 'тирану', 
-            'дубровник', 'дубровника', 
+            'тирана', 'тираны', 'тирану',
+            'дубровник', 'дубровника',
             'требинье',
-            'босния','боснии','боснию',
+            'босния', 'боснии', 'боснию', 
             'белград', 'белграда',
             'албания', 'албанию', 'албании',
             'хорватия', 'хорватию', 'хорватии',
             'сербия', 'сербию', 'сербии',
-            'херцег-нови', 'херцегнови', 'херцег','герцег', 'герцегнови', 'херцог', 'герцог'
+            'херцег-нови',  'херцегнови',  'херцег', 'герцег',  'герцегнови',  'херцог',  'герцог'
         ],
         "excluded_senders": [],
         "recipient": 6472110264,
         "include_questions": True
     }
-    #{
+    # {
     #    "chats": { -1001211521747, -1001609324023 },
     #    "keywords": ['кровать', 'кресло', 'ковер', 'ковёр'],
     #    "excluded_keywords": ['автокресло'],
     #    "excluded_senders": [7176393076],
     #    "recipient": 418176416,
     #    "include_questions": False
-    #}
+    # }
 ]
 
 PERIOD_MINUTES = 5
@@ -76,9 +76,9 @@ openAIclient = openai.AsyncOpenAI()
 
 def normalize_text(text: str) -> str:
     text = text.lower().strip()
-    text = re.sub(r'[\(\)\[\]\{\}]', '', text)    
-    text = re.sub(r'[^а-яa-z0-9 ]+', '', text)   
-    text = re.sub(r'\s+', ' ', text)              
+    text = re.sub(r'[\(\)\[\]\{\}]', '', text)
+    text = re.sub(r'[^а-яa-z0-9 ]+', '', text)
+    text = re.sub(r'\s+', ' ', text)
     return text
 
 def getnow():
@@ -124,7 +124,7 @@ async def send_message_safe(recipient, message):
         last_sent[recipient] = now
     except PeerFloodError:
         print("Hit PeerFloodError — backing off")
-        await asyncio.sleep(DELAY_TOO_MANY_REQUESTS) 
+        await asyncio.sleep(DELAY_TOO_MANY_REQUESTS)
 
 @client.on(events.NewMessage)
 async def handler(event):
@@ -177,7 +177,7 @@ async def handler(event):
         logging.info(f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg: {event.raw_text}")
 
         message = (
-            f"Cообщение в чате \"{chat_title}\" от {sender_link} в {now.strftime('%H:%M:%S')}:\n\n"
+            f"Cообщение в чате \"{chat_title}\" от {sender_link} в {now.strftime("%H:%M:%S")}:\n\n"
             f"{event.raw_text}"
         )
 
@@ -186,7 +186,7 @@ async def handler(event):
 
         await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
         await send_message_safe(config["recipient"], message)
-        logging.info(f"Message sent: {message} | Sender: {sender_name} | Recipient: {config['recipient']}");
+        logging.info(f"Message sent: {message} | Sender: {sender_name} | Recipient: {config['recipient']}")
 
         add_to_user_cache(sender_id, text)
 
