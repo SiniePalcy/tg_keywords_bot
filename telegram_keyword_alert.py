@@ -182,8 +182,7 @@ async def handler(event):
         if hasattr(chat, 'username') and chat.username:
             message_link = f"https://t.me/{chat.username}/{event.id}"
 
-        logging.info(f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg:"
-        f"{event.raw_text}")
+        logging.info(f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg:{event.raw_text}")
 
         message = (
             f"Cообщение в чате \"{chat_title}\" от {sender_link} в {now.strftime('%H:%M:%S')}:\n\n"
