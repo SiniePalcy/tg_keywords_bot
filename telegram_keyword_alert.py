@@ -16,11 +16,7 @@ from zoneinfo import ZoneInfo
 user_message_cache = defaultdict(list)
 last_sent: dict[int, datetime] = {}
 
-seqlog.log_to_seq(
-    server_url="http://localhost:5341",
-    api_key=None,
-    level=logging.INFO
-)
+seqlog.log_to_seq(server_url="http://localhost:5341", api_key=None, level=logging.INFO)
 
 load_dotenv()
 
@@ -29,7 +25,7 @@ if api_id_str is None:
     raise ValueError("API_ID not set")
 api_id = int(api_id_str)
 api_hash = os.getenv("API_HASH")
-session_name = 'keyword_alert_notification'
+session_name = "keyword_alert_notification"
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 ENABLE_SEMANTIC_FILTER = os.getenv("ENABLE_SEMANTIC_FILTER", "False").lower() == "true"
@@ -39,23 +35,59 @@ DELAY_TOO_MANY_REQUESTS = 120
 CONFIGS = [
     {
         "chats": {-1001954706166, -1001676333024, -1001214960694, -1001850398389},
-        "keywords": ['ищу', 'ищем', 'ищет', 'нужна', 'нужен', 'нужно', 'кто', 'кто-нибудь'],
+        "keywords": [
+            "ищу",
+            "ищем",
+            "ищет",
+            "нужна",
+            "нужен",
+            "нужно",
+            "кто",
+            "кто-нибудь",
+        ],
         "excluded_keywords": [
-            'визаран', 'виза ран', 'визоран', 'визо ран',
-            'доход', 'подработка', "удаленный", "удаленно", "удаленная", "работа", "занятость", "шкипер"
-            'тирана', 'тираны', 'тирану',
-            'дубровник', 'дубровника',
-            'требинье',
-            'босния', 'боснии', 'боснию',
-            'белград', 'белграда',
-            'албания', 'албанию', 'албании',
-            'хорватия', 'хорватию', 'хорватии',
-            'сербия', 'сербию', 'сербии',
-            'херцег-нови',  'херцегнови',  'херцег', 'герцег',  'герцегнови',  'херцог',  'герцог'
+            "визаран",
+            "виза ран",
+            "визоран",
+            "визо ран",
+            "доход",
+            "подработка",
+            "удаленный",
+            "удаленно",
+            "удаленная",
+            "работа",
+            "занятость",
+            "шкипер" "тирана",
+            "тираны",
+            "тирану",
+            "дубровник",
+            "дубровника",
+            "требинье",
+            "босния",
+            "боснии",
+            "боснию",
+            "белград",
+            "белграда",
+            "албания",
+            "албанию",
+            "албании",
+            "хорватия",
+            "хорватию",
+            "хорватии",
+            "сербия",
+            "сербию",
+            "сербии",
+            "херцег-нови",
+            "херцегнови",
+            "херцег",
+            "герцег",
+            "герцегнови",
+            "херцог",
+            "герцог",
         ],
         "excluded_senders": [],
         "recipient": 6472110264,
-        "include_questions": True
+        "include_questions": True,
     }
     # {
     #    "chats": { -1001211521747, -1001609324023 },
@@ -76,9 +108,9 @@ openAIclient = openai.AsyncOpenAI()
 
 def normalize_text(text: str) -> str:
     text = text.lower().strip()
-    text = re.sub(r'[\(\)\[\]\{\}]', '', text)
-    text = re.sub(r'[^а-яa-z0-9 ]+', '', text)
-    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r"[\(\)\[\]\{\}]", "", text)
+    text = re.sub(r"[^а-яa-z0-9 ]+", "", text)
+    text = re.sub(r"\s+", " ", text)
     return text
 
 
@@ -98,8 +130,7 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 async def get_embedding(text: str) -> np.ndarray:
     response = await openAIclient.embeddings.create(
-        input=text,
-        model="text-embedding-3-small"
+        input=text, model="text-embedding-3-small"
     )
     return np.array(response.data[0].embedding)
 
@@ -126,7 +157,7 @@ async def send_message_safe(recipient: int, message: str) -> None:
         return
 
     try:
-        await client.send_message(recipient, message, parse_mode='markdown')
+        await client.send_message(recipient, message, parse_mode="markdown")
         last_sent[recipient] = now
     except PeerFloodError:
         print("Hit PeerFloodError — backing off")
@@ -144,7 +175,7 @@ async def handler(event: events.NewMessage.Event) -> None:
 
     config: dict[str, object]
     for config in CONFIGS:
-        if isinstance(config['chats'], set) and event.chat_id not in config['chats']:
+        if isinstance(config["chats"], set) and event.chat_id not in config["chats"]:
             continue
 
         excluded_senders = config.get("excluded_senders", [])
@@ -157,35 +188,47 @@ async def handler(event: events.NewMessage.Event) -> None:
             continue
 
         keywords = config.get("keywords", [])
-        matched = any(word in text for word in keywords) if isinstance(keywords, list) else False
-        is_question = '?' in text
+        matched = (
+            any(word in text for word in keywords)
+            if isinstance(keywords, list)
+            else False
+        )
+        is_question = "?" in text
         if not (matched or (config.get("include_questions") and is_question)):
             continue
 
         excluded_keywords = config.get("excluded_keywords", [])
-        if isinstance(excluded_keywords, list) and any(block_word in text for block_word in excluded_keywords):
+        if isinstance(excluded_keywords, list) and any(
+            block_word in text for block_word in excluded_keywords
+        ):
             logging.info(f"⛔ Игнор по слову для пользователя {sender_id}:{text}")
             continue
 
         now = getnow()
-        if any((now - ts) < timedelta(minutes=PERIOD_MINUTES) for _, ts in recent_messages):
-            logging.info(f"⏱️ Игнор: пользователь {sender_id} уже писал за последние {PERIOD_MINUTES} минут")
+        if any(
+            (now - ts) < timedelta(minutes=PERIOD_MINUTES) for _, ts in recent_messages
+        ):
+            logging.info(
+                f"⏱️ Игнор: пользователь {sender_id} уже писал за последние {PERIOD_MINUTES} минут"
+            )
             continue
 
         if ENABLE_SEMANTIC_FILTER and await is_semantically_duplicate(sender_id, text):
-            logging.info(f"⛔ Игнор: пользователь {sender_id} уже писал об"f"этом")
+            logging.info(f"⛔ Игнор: пользователь {sender_id} уже писал об" f"этом")
             continue
 
         chat = await event.get_chat()
-        chat_title = getattr(chat, 'title', '')
-        sender_name = getattr(sender, 'first_name', 'пользователь')
+        chat_title = getattr(chat, "title", "")
+        sender_name = getattr(sender, "first_name", "пользователь")
         sender_link = f"[{sender_name}](tg://user?id={sender_id})"
         message_link = None
 
-        if hasattr(chat, 'username') and chat.username:
+        if hasattr(chat, "username") and chat.username:
             message_link = f"https://t.me/{chat.username}/{event.id}"
 
-        logging.info(f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg:{event.raw_text}")
+        logging.info(
+            f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg:{event.raw_text}"
+        )
 
         message = (
             f"Cообщение в чате \"{chat_title}\" от {sender_link} в {now.strftime('%H:%M:%S')}:\n\n"
@@ -193,12 +236,14 @@ async def handler(event: events.NewMessage.Event) -> None:
         )
 
         if message_link:
-            message += f"\n🔗 [Открыть сообщение]({message_link})"
+            message += f"\n[Открыть сообщение]({message_link})"
 
         await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
-        if isinstance(config['recipient'], int):
-            await send_message_safe(config['recipient'], message)
-        logging.info(f"Message sent: {message} | Sender: {sender_name} | Recipient: {config['recipient']}")
+        if isinstance(config["recipient"], int):
+            await send_message_safe(config["recipient"], message)
+        logging.info(
+            f"Message sent: {message} | Sender: {sender_name} | Recipient: {config['recipient']}"
+        )
 
         add_to_user_cache(sender_id, text)
 
@@ -225,7 +270,9 @@ async def shutdown() -> None:
 async def clear_cache_at_midnight() -> None:
     while True:
         now = getnow()
-        tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
         seconds_until_midnight = (tomorrow - now).total_seconds()
 
         logging.info(f"⏳ Clearing cache after {int(seconds_until_midnight)} seconds")
@@ -243,5 +290,6 @@ async def main() -> None:
         logging.info("⚠️ KeyboardInterrupt — shutting down...")
         await shutdown()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())
