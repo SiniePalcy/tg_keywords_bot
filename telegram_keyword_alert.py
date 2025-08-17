@@ -88,15 +88,20 @@ CONFIGS = [
         "excluded_senders": [],
         "recipient": 6472110264,
         "include_questions": True,
-    }
-    # {
-    #    "chats": { -1001211521747, -1001609324023 },
-    #    "keywords": ['кровать', 'кресло', 'ковер', 'ковёр'],
-    #    "excluded_keywords": ['автокресло'],
-    #    "excluded_senders": [7176393076],
-    #    "recipient": 418176416,
-    #    "include_questions": False
-    # }
+    },
+    {
+        "chats": {-1001211521747, -1001609324023},
+        "keywords": [
+            "принтер",
+            "стол с подъемным механизмом",
+            "швейная машинка",
+            "швейная машина",
+        ],
+        "excluded_keywords": [],
+        "excluded_senders": [7176393076],
+        "recipient": 418176416,
+        "include_questions": False,
+    },
 ]
 
 PERIOD_MINUTES = 5
