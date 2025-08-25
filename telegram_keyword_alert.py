@@ -16,7 +16,13 @@ from zoneinfo import ZoneInfo
 user_message_cache = defaultdict(list)
 last_sent: dict[int, datetime] = {}
 
-seqlog.log_to_seq(server_url="http://localhost:5341", api_key=None, level=logging.INFO)
+seqlog.log_to_seq(
+    server_url="http://127.0.0.1:5341",
+    api_key=None,  # set if you created an API key in Seq
+    level=logging.INFO,
+    auto_flush_timeout=1,
+    override_root_logger=True,  # attach handler to root logger
+)
 
 load_dotenv()
 
@@ -30,7 +36,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 ENABLE_SEMANTIC_FILTER = os.getenv("ENABLE_SEMANTIC_FILTER", "False").lower() == "true"
 DELAY_BETWEEN_MESSAGES = 1
-DELAY_TOO_MANY_REQUESTS = 120
+DELAY_TOO_MANY_REQUESTS = 30
 
 CONFIGS = [
     {
