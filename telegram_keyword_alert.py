@@ -291,6 +291,7 @@ async def clear_cache_at_midnight() -> None:
         await asyncio.sleep(seconds_until_midnight)
 
         user_message_cache.clear()
+        last_sent.clear()
         logging.info("🧹 Message cache is cleared at midnight UTC")
 
 
