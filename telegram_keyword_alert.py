@@ -93,18 +93,7 @@ CONFIGS = [
         "excluded_senders": [],
         "recipient": 6472110264,
         "include_questions": True,
-    },
-    {
-        "chats": {-1001211521747, -1001609324023, -1001201487135},
-        "keywords": [
-            "принтер",
-            "принтеры",
-        ],
-        "excluded_keywords": [],
-        "excluded_senders": [7176393076],
-        "recipient": 418176416,
-        "include_questions": False,
-    },
+    }
 ]
 
 PERIOD_MINUTES = 5
