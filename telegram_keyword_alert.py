@@ -35,7 +35,7 @@ session_name = "keyword_alert_notification"
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 ENABLE_SEMANTIC_FILTER = os.getenv("ENABLE_SEMANTIC_FILTER", "False").lower() == "true"
-DELAY_BETWEEN_MESSAGES = 1
+DELAY_BETWEEN_MESSAGES = 0.5
 DELAY_TOO_MANY_REQUESTS = 30
 
 CONFIGS = [
@@ -112,7 +112,7 @@ def normalize_text(text: str) -> str:
 
 
 def getnow() -> datetime:
-    return datetime.now(ZoneInfo("Etc/GMT-2"))
+    return datetime.now(ZoneInfo("Europe/Podgorica"))
 
 
 def add_to_user_cache(user_id: int, raw_text: str) -> None:
@@ -235,7 +235,6 @@ async def handler(event: events.NewMessage.Event) -> None:
         if message_link:
             message += f"\n[Открыть сообщение]({message_link})"
 
-        await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
         if isinstance(config["recipient"], int):
             await send_message_safe(config["recipient"], message)
         logging.info(
@@ -243,6 +242,8 @@ async def handler(event: events.NewMessage.Event) -> None:
         )
 
         add_to_user_cache(sender_id, text)
+
+        await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
 
 
 async def run_bot() -> None:
