@@ -162,6 +162,7 @@ async def send_message_safe(recipient: int, message: str) -> None:
         print("Hit PeerFloodError — backing off")
         await asyncio.sleep(DELAY_TOO_MANY_REQUESTS)
 
+
 async def handle_transfer_offer(event: events.NewMessage.Event, raw_text: str, prefix_used: str) -> None:
     rest = raw_text[len(prefix_used):].strip(" :,-")
 
@@ -229,7 +230,7 @@ async def handler(event: events.NewMessage.Event) -> None:
             "предложи трансфер",
             "предложить трансфер",
             "предложи попутку",
-            "предложить попутку",
+            "предложить попутку"
         )
 
         prefix_used = next((p for p in prefixes if lower.startswith(p)), None)
