@@ -236,7 +236,7 @@ async def handler(event: events.NewMessage.Event) -> None:
         prefix_used = next((p for p in prefixes if lower.startswith(p)), None)
         if prefix_used:
             await handle_transfer_offer(event, raw_text, prefix_used)
-            return 
+            return
 
     text = normalize_text(raw_text)
 
