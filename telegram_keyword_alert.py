@@ -37,6 +37,8 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 ENABLE_SEMANTIC_FILTER = os.getenv("ENABLE_SEMANTIC_FILTER", "False").lower() == "true"
 DELAY_BETWEEN_MESSAGES = 0.5
 DELAY_TOO_MANY_REQUESTS = 30
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TRANSFER_IMAGE_PATH = os.path.join(BASE_DIR, "transfer.jpg")
 
 CONFIGS = [
     {
@@ -106,7 +108,7 @@ openAIclient = openai.AsyncOpenAI()
 def normalize_text(text: str) -> str:
     text = text.lower().strip()
     text = re.sub(r"[\(\)\[\]\{\}]", "", text)
-    text = re.sub(r"[^а-яa-z0-9 ]+", "", text)
+    text = re.sub(r"[^a-яa-z0-9 ]+", "", text)
     text = re.sub(r"\s+", " ", text)
     return text
 
@@ -160,6 +162,51 @@ async def send_message_safe(recipient: int, message: str) -> None:
         print("Hit PeerFloodError — backing off")
         await asyncio.sleep(DELAY_TOO_MANY_REQUESTS)
 
+async def handle_transfer_offer(event: events.NewMessage.Event, raw_text: str, prefix_used: str) -> None:
+    rest = raw_text[len(prefix_used):].strip(" :,-")
+
+    if not event.is_reply:
+        await event.reply("Команда должна быть ответом на сообщение бота с метаданными 🙂")
+        return
+
+    reply_msg = await event.get_reply_message()
+    if reply_msg is None:
+        await event.reply("Не удалось получить сообщение, на которое вы отвечали.")
+        return
+
+    match = re.search(r"tg://user\?id=(\d+)", reply_msg.raw_text or "")
+    if not match:
+        await event.reply("Не нашёл пользователя в тексте уведомления. Проверьте, что это именно сообщение бота.")
+        return
+
+    target_user_id = int(match.group(1))
+
+    if not rest:
+        await event.reply("Добавьте описание: например `предложи попутку Бар — Будва`")
+        return
+
+    if prefix_used.startswith("предложи попутку") or prefix_used.startswith("предложить попутку"):
+        caption = (
+            f"Здравствуйте. Могу вас подвезти попутно {rest}."
+        )
+    else:
+        caption = (
+            f"Здравствуйте. Могу предложить трансфер {rest}. "
+            f"Машина 2019 года, кондиционер, багажник 400 литров, хетчбек. "
+            f"В салоне не курят. Включаю музыку по запросу, работает CarPlay."
+        )
+
+    try:
+        await client.send_file(
+            target_user_id,
+            TRANSFER_IMAGE_PATH,
+            caption=caption,
+        )
+        await event.reply("✅ Отправлено.")
+    except Exception as e:
+        logging.exception(e)
+        await event.reply("Не получилось отправить сообщение 😔")
+
 
 @client.on(events.NewMessage)
 async def handler(event: events.NewMessage.Event) -> None:
@@ -168,7 +215,29 @@ async def handler(event: events.NewMessage.Event) -> None:
         return
 
     sender_id = sender.id
-    text = normalize_text(event.raw_text)
+    raw_text = (event.raw_text or "").strip()
+
+    alert_recipients = {
+        cfg["recipient"]
+        for cfg in CONFIGS
+        if isinstance(cfg.get("recipient"), int)
+    }
+
+    if sender_id in alert_recipients and event.is_reply and raw_text:
+        lower = raw_text.lower()
+        prefixes = (
+            "предложи трансфер",
+            "предложить трансфер",
+            "предложи попутку",
+            "предложить попутку",
+        )
+
+        prefix_used = next((p for p in prefixes if lower.startswith(p)), None)
+        if prefix_used:
+            await handle_transfer_offer(event, raw_text, prefix_used)
+            return 
+
+    text = normalize_text(raw_text)
 
     config: dict[str, object]
     for config in CONFIGS:
@@ -228,7 +297,7 @@ async def handler(event: events.NewMessage.Event) -> None:
         )
 
         message = (
-            f"Cообщение в чате \"{chat_title}\" от {sender_link} в {now.strftime('%H:%M:%S')}:\n\n"
+            f"Сообщение в чате \"{chat_title}\" от {sender_link} в {now.strftime('%H:%M:%S')}:\n\n"
             f"{event.raw_text}"
         )
 
