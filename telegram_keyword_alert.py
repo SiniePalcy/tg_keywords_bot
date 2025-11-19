@@ -168,7 +168,7 @@ async def handle_transfer_offer(event: events.NewMessage.Event, raw_text: str, p
     rest = raw_text[len(prefix_used):].strip(" :,-")
 
     if not event.is_reply:
-        await event.reply("Команда должна быть ответом на сообщение бота с метаданными 🙂")
+        await event.reply("Команда должна быть ответом на сообщение бота с метаданными")
         return
 
     reply_msg = await event.get_reply_message()
@@ -197,25 +197,34 @@ async def handle_transfer_offer(event: events.NewMessage.Event, raw_text: str, p
         await event.reply("Добавьте описание: например `предложи попутку Бар — Будва`")
         return
 
-    if prefix_used.startswith("предложи попутку") or prefix_used.startswith("предложить попутку"):
+    is_carpool = prefix_used.startswith("предложи попутку") or prefix_used.startswith("предложить попутку")
+
+    if is_carpool:
+        # 💬 Попутка — только текст, без фото
         caption = f"Здравствуйте. Могу предложить вам попутный трансфер {rest}."
+        try:
+            await client.send_message(target_user_id, caption)
+            await event.reply("Отправлено (попутка без фото).")
+        except Exception as e:
+            logging.exception(e)
+            await event.reply("Не получилось отправить сообщение клиенту ")
     else:
+        # 🚗 Обычный трансфер — фото + текст
         caption = (
             f"Здравствуйте. Могу предложить трансфер {rest}. "
             f"Машина 2019 года, кондиционер, багажник 400 литров, хетчбек. "
             f"В салоне не курят. Включаю музыку по запросу, работает CarPlay."
         )
-
-    try:
-        await client.send_file(
-            target_user_id,
-            TRANSFER_IMAGE_PATH,
-            caption=caption,
-        )
-        await event.reply("✅ Отправлено.")
-    except Exception as e:
-        logging.exception(e)
-        await event.reply("Не получилось отправить сообщение 😔")
+        try:
+            await client.send_file(
+                target_user_id,
+                TRANSFER_IMAGE_PATH,
+                caption=caption,
+            )
+            await event.reply("Отправлено")
+        except Exception as e:
+            logging.exception(e)
+            await event.reply("Не получилось отправить сообщение")
 
 
 @client.on(events.NewMessage)
