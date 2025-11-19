@@ -7,7 +7,7 @@ import openai
 import numpy as np
 from telethon import TelegramClient, events
 from telethon.errors import PeerFloodError
-from telethon.tl.types import User, MessageEntityTextUrl
+from telethon.tl.types import User
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from collections import defaultdict
