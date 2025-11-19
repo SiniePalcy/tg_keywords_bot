@@ -174,9 +174,9 @@ async def handle_transfer_offer(event: events.NewMessage.Event, raw_text: str, p
     if reply_msg is None:
         await event.reply("Не удалось получить сообщение, на которое вы отвечали.")
         return
-    
+
     target_user_id = None
-    
+
     if reply_msg.entities:
         for ent in reply_msg.entities:
             if hasattr(ent, "url") and ent.url and ent.url.startswith("tg://user?id="):
