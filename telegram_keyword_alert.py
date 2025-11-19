@@ -7,11 +7,12 @@ import openai
 import numpy as np
 from telethon import TelegramClient, events
 from telethon.errors import PeerFloodError
-from telethon.tl.types import User
+from telethon.tl.types import User, MessageEntityTextUrl
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from collections import defaultdict
 from zoneinfo import ZoneInfo
+from typing import Optional
 
 user_message_cache = defaultdict(list)
 last_sent: dict[int, datetime] = {}
