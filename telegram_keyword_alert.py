@@ -174,10 +174,22 @@ async def handle_transfer_offer(event: events.NewMessage.Event, raw_text: str, p
     if reply_msg is None:
         await event.reply("Не удалось получить сообщение, на которое вы отвечали.")
         return
+    
+    target_user_id = None
+    
+    if reply_msg.entities:
+        for ent in reply_msg.entities:
+            if hasattr(ent, "url") and ent.url and ent.url.startswith("tg://user?id="):
+                target_user_id = int(ent.url.split("=")[1])
+                break
 
-    match = re.search(r"tg://user\?id=(\d+)", reply_msg.raw_text or "")
-    if not match:
-        await event.reply("Не нашёл пользователя в тексте уведомления. Проверьте, что это именно сообщение бота.")
+    if not target_user_id:
+        match = re.search(r"tg://user\?id=(\d+)", reply_msg.raw_text or "")
+        if match:
+            target_user_id = int(match.group(1))
+
+    if not target_user_id:
+        await event.reply("Не нашёл пользователя в вашем ответе. Скорее всего, Telegram вырезал ссылку из текста.")
         return
 
     target_user_id = int(match.group(1))
