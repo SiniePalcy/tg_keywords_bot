@@ -178,25 +178,18 @@ async def handle_transfer_offer(event: events.NewMessage.Event, raw_text: str, p
 
     target_user_id: Optional[int] = None
 
-    entities = getattr(reply_msg, "entities", None)
-    if entities:
-        for ent in entities:
-            if isinstance(ent, MessageEntityTextUrl) and ent.url and ent.url.startswith("tg://user?id="):
-                try:
-                    target_user_id = int(ent.url.split("=", 1)[1])
-                except ValueError:
-                    logging.warning(f"Не удалось распарсить user id из url: {ent.url}")
-                break
-
-    if target_user_id is None:
-        match = re.search(r"tg://user\?id=(\d+)", reply_msg.raw_text or "")
-        if match is not None:
+    reply_text = reply_msg.raw_text or ""
+    match = re.search(r"USER_ID:(\d+)", reply_text)
+    if match is not None:
+        try:
             target_user_id = int(match.group(1))
+        except ValueError:
+            logging.warning(f"Не удалось распарсить USER_ID из текста: {reply_text!r}")
 
     if target_user_id is None:
         await event.reply(
-            "Не нашёл пользователя в тексте уведомления. "
-            "Проверьте, что вы отвечаете на сообщение бота, а не на другое."
+            "Не нашёл USER_ID в уведомлении. "
+            "Скорее всего, вы отвечаете на старое сообщение бота или не на то уведомление."
         )
         return
 
@@ -320,6 +313,8 @@ async def handler(event: events.NewMessage.Event) -> None:
 
         if message_link:
             message += f"\n[Открыть сообщение]({message_link})"
+
+        message += f"\nUSER_ID:{sender_id}"
 
         if isinstance(config["recipient"], int):
             await send_message_safe(config["recipient"], message)
