@@ -36,7 +36,7 @@ session_name = "keyword_alert_notification"
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 ENABLE_SEMANTIC_FILTER = os.getenv("ENABLE_SEMANTIC_FILTER", "False").lower() == "true"
-DELAY_BETWEEN_MESSAGES = 0.5
+DELAY_BETWEEN_MESSAGES = 0.25
 DELAY_TOO_MANY_REQUESTS = 30
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TRANSFER_IMAGE_PATH = os.path.join(BASE_DIR, "transfer.jpg")
@@ -204,7 +204,7 @@ async def handle_transfer_offer(event: events.NewMessage.Event, raw_text: str, p
         caption = f"Здравствуйте. Могу предложить вам попутный трансфер {rest}."
         try:
             await client.send_message(target_user_id, caption)
-            await event.reply("Отправлено (попутка без фото).")
+            await event.reply("Отправлено")
         except Exception as e:
             logging.exception(e)
             await event.reply("Не получилось отправить сообщение клиенту ")
