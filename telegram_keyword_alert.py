@@ -162,7 +162,6 @@ async def send_message_safe(recipient: int, message: str) -> None:
         print("Hit PeerFloodError — backing off")
         await asyncio.sleep(DELAY_TOO_MANY_REQUESTS)
 
-
 async def handle_transfer_offer(event: events.NewMessage.Event, raw_text: str, prefix_used: str) -> None:
     rest = raw_text[len(prefix_used):].strip(" :,-")
 
@@ -175,33 +174,36 @@ async def handle_transfer_offer(event: events.NewMessage.Event, raw_text: str, p
         await event.reply("Не удалось получить сообщение, на которое вы отвечали.")
         return
 
-    target_user_id = None
+    target_user_id: Optional[int] = None
 
-    if reply_msg.entities:
-        for ent in reply_msg.entities:
-            if hasattr(ent, "url") and ent.url and ent.url.startswith("tg://user?id="):
-                target_user_id = int(ent.url.split("=")[1])
+    entities = getattr(reply_msg, "entities", None)
+    if entities:
+        for ent in entities:
+            if isinstance(ent, MessageEntityTextUrl) and ent.url and ent.url.startswith("tg://user?id="):
+                try:
+                    target_user_id = int(ent.url.split("=", 1)[1])
+                except ValueError:
+                    logging.warning(f"Не удалось распарсить user id из url: {ent.url}")
                 break
 
-    if not target_user_id:
+    if target_user_id is None:
         match = re.search(r"tg://user\?id=(\d+)", reply_msg.raw_text or "")
-        if match:
+        if match is not None:
             target_user_id = int(match.group(1))
 
-    if not target_user_id:
-        await event.reply("Не нашёл пользователя в вашем ответе. Скорее всего, Telegram вырезал ссылку из текста.")
+    if target_user_id is None:
+        await event.reply(
+            "Не нашёл пользователя в тексте уведомления. "
+            "Проверьте, что вы отвечаете на сообщение бота, а не на другое."
+        )
         return
-
-    target_user_id = int(match.group(1))
 
     if not rest:
         await event.reply("Добавьте описание: например `предложи попутку Бар — Будва`")
         return
 
     if prefix_used.startswith("предложи попутку") or prefix_used.startswith("предложить попутку"):
-        caption = (
-            f"Здравствуйте. Могу вас подвезти попутно {rest}."
-        )
+        caption = f"Здравствуйте. Могу предложить вам попутный трансфер {rest}."
     else:
         caption = (
             f"Здравствуйте. Могу предложить трансфер {rest}. "
