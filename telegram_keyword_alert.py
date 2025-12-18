@@ -52,12 +52,20 @@ CONFIGS = [
             "нужен",
             "нужно",
             "кто",
+            "кто-то",
+            "ктото",
             "кто-нибудь",
+            "ктонибудь",
             "требуется",
             "сколько",
         ],
         "excluded_keywords": [
             "usdt",
+            "вакансия",
+            "₽",
+            "свободный график",
+            "опыт",
+            "рублей",
             "визаран",
             "виза ран",
             "визоран",
@@ -164,8 +172,10 @@ async def send_message_safe(recipient: int, message: str) -> None:
         await asyncio.sleep(DELAY_TOO_MANY_REQUESTS)
 
 
-async def handle_transfer_offer(event: events.NewMessage.Event, raw_text: str, prefix_used: str) -> None:
-    rest = raw_text[len(prefix_used):].strip(" :,-")
+async def handle_transfer_offer(
+    event: events.NewMessage.Event, raw_text: str, prefix_used: str
+) -> None:
+    rest = raw_text[len(prefix_used) :].strip(" :,-")
 
     if not event.is_reply:
         await event.reply("Команда должна быть ответом на сообщение бота с метаданными")
@@ -197,7 +207,9 @@ async def handle_transfer_offer(event: events.NewMessage.Event, raw_text: str, p
         await event.reply("Добавьте описание: например `предложи попутку Бар — Будва`")
         return
 
-    is_carpool = prefix_used.startswith("предложи попутку") or prefix_used.startswith("предложить попутку")
+    is_carpool = prefix_used.startswith("предложи попутку") or prefix_used.startswith(
+        "предложить попутку"
+    )
 
     if is_carpool:
         # 💬 Попутка — только текст, без фото
@@ -237,9 +249,7 @@ async def handler(event: events.NewMessage.Event) -> None:
     raw_text = (event.raw_text or "").strip()
 
     alert_recipients = {
-        cfg["recipient"]
-        for cfg in CONFIGS
-        if isinstance(cfg.get("recipient"), int)
+        cfg["recipient"] for cfg in CONFIGS if isinstance(cfg.get("recipient"), int)
     }
 
     if sender_id in alert_recipients and event.is_reply and raw_text:
@@ -248,7 +258,7 @@ async def handler(event: events.NewMessage.Event) -> None:
             "предложи трансфер",
             "предложить трансфер",
             "предложи попутку",
-            "предложить попутку"
+            "предложить попутку",
         )
 
         prefix_used = next((p for p in prefixes if lower.startswith(p)), None)
