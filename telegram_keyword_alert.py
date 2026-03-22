@@ -126,7 +126,7 @@ CONFIGS = [
         "excluded_senders": [7176393076],
         "recipient": 418176416,
         "include_questions": False,
-    },
+    }
 ]
 
 PERIOD_MINUTES = 5
