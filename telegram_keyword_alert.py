@@ -205,7 +205,7 @@ async def send_message_safe(recipient: int, message: str) -> bool:
 
     try:
         logging.info(f"send_message_safe: sending to {recipient}")
-        await client.send_message(recipient, message, parse_mode=None)
+        await client.send_message(recipient, message, parse_mode="markdown")
         last_sent[recipient] = getnow()
         logging.info(
             f"send_message_safe: sent to {recipient} in {(getnow() - started_at).total_seconds():.3f}s"
