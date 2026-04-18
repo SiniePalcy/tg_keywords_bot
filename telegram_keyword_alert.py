@@ -339,9 +339,9 @@ async def handler(event: events.NewMessage.Event) -> None:
             )
             continue
 
-        #if ENABLE_SEMANTIC_FILTER and await is_semantically_duplicate(sender_id, text):
-        #    logging.info(f"⛔ Игнор: пользователь {sender_id} уже писал об" f"этом")
-        #    continue
+        # if ENABLE_SEMANTIC_FILTER and await is_semantically_duplicate(sender_id, text):
+        #     logging.info(f"⛔ Игнор: пользователь {sender_id} уже писал об" f"этом")
+        #     continue
 
         chat = await event.get_chat()
         chat_title = getattr(chat, "title", "")
