@@ -164,10 +164,9 @@ def getnow() -> datetime:
     return datetime.now(ZoneInfo("Europe/Podgorica"))
 
 
-def add_to_user_cache(user_id: int, raw_text: str) -> None:
-    normalized = normalize_text(raw_text)
+def add_to_user_cache(user_id: int, normalized_text: str) -> None:
     now = getnow()
-    user_message_cache[user_id].append((normalized, now))
+    user_message_cache[user_id].append((normalized_text, now))
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -196,18 +195,23 @@ async def is_semantically_duplicate(user_id: int, text: str) -> bool:
     return False
 
 
-async def send_message_safe(recipient: int, message: str) -> None:
+async def send_message_safe(recipient: int, message: str) -> bool:
     now = getnow()
     if recipient in last_sent and now - last_sent[recipient] < timedelta(seconds=60):
-        print(f"Too soon to message {recipient}")
-        return
+        logging.info(f"Too soon to message {recipient}")
+        return False
 
     try:
         await client.send_message(recipient, message, parse_mode="markdown")
         last_sent[recipient] = now
+        return True
     except PeerFloodError:
-        print("Hit PeerFloodError — backing off")
+        logging.warning("Hit PeerFloodError — backing off")
         await asyncio.sleep(DELAY_TOO_MANY_REQUESTS)
+        return False
+    except Exception:
+        logging.exception(f"Failed to send message to {recipient}")
+        return False
 
 
 async def handle_transfer_offer(
@@ -326,7 +330,7 @@ async def handler(event: events.NewMessage.Event) -> None:
             if isinstance(keywords, list)
             else False
         )
-        is_question = "?" in text
+        is_question = "?" in raw_text
         if not (matched or (config.get("include_questions") and is_question)):
             continue
 
@@ -374,10 +378,11 @@ async def handler(event: events.NewMessage.Event) -> None:
         message += f"\nUSER_ID:{sender_id}"
 
         if isinstance(config["recipient"], int):
-            await send_message_safe(config["recipient"], message)
-        logging.info(
-            f"Message sent: {message} | Sender: {sender_name} | Recipient: {config['recipient']}"
-        )
+            sent = await send_message_safe(config["recipient"], message)
+            if sent:
+                logging.info(
+                    f"Message sent | Sender: {sender_name} | Recipient: {config['recipient']}"
+                )
 
         add_to_user_cache(sender_id, text)
 
