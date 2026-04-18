@@ -196,14 +196,20 @@ async def is_semantically_duplicate(user_id: int, text: str) -> bool:
 
 
 async def send_message_safe(recipient: int, message: str) -> bool:
-    now = getnow()
+    started_at = getnow()
+    now = started_at
+
     if recipient in last_sent and now - last_sent[recipient] < timedelta(seconds=60):
         logging.info(f"Too soon to message {recipient}")
         return False
 
     try:
-        await client.send_message(recipient, message, parse_mode="markdown")
-        last_sent[recipient] = now
+        logging.info(f"send_message_safe: sending to {recipient}")
+        await client.send_message(recipient, message, parse_mode=None)
+        last_sent[recipient] = getnow()
+        logging.info(
+            f"send_message_safe: sent to {recipient} in {(getnow() - started_at).total_seconds():.3f}s"
+        )
         return True
     except PeerFloodError:
         logging.warning("Hit PeerFloodError — backing off")
@@ -283,7 +289,16 @@ async def handle_transfer_offer(
 
 @client.on(events.NewMessage)
 async def handler(event: events.NewMessage.Event) -> None:
+    started_at = getnow()
+    logging.info(f"HANDLER START chat_id={event.chat_id} event_id={event.id} at={started_at.isoformat()}")
+
+    event_time = event.message.date
+    logging.info(f"event.message.date={event_time}")
+    logging.info(f"handler_now={getnow().isoformat()}")
+
     sender = await event.get_sender()
+    logging.info(f"after get_sender +{(getnow() - started_at).total_seconds():.3f}s")
+
     if not isinstance(sender, User) or sender.bot:
         return
 
@@ -354,7 +369,10 @@ async def handler(event: events.NewMessage.Event) -> None:
         #    logging.info(f"⛔ Игнор: пользователь {sender_id} уже писал об" f"этом")
         #    continue
 
+        logging.info(f"before get_chat +{(getnow() - started_at).total_seconds():.3f}s")
         chat = await event.get_chat()
+        logging.info(f"after get_chat +{(getnow() - started_at).total_seconds():.3f}s")
+        
         chat_title = getattr(chat, "title", "")
         sender_name = getattr(sender, "first_name", "пользователь")
         sender_link = f"[{sender_name}](tg://user?id={sender_id})"
@@ -378,7 +396,10 @@ async def handler(event: events.NewMessage.Event) -> None:
         message += f"\nUSER_ID:{sender_id}"
 
         if isinstance(config["recipient"], int):
+            logging.info(f"before send_message_safe +{(getnow() - started_at).total_seconds():.3f}s")
             sent = await send_message_safe(config["recipient"], message)
+            logging.info(f"after send_message_safe +{(getnow() - started_at).total_seconds():.3f}s sent={sent}")
+
             if sent:
                 logging.info(
                     f"Message sent | Sender: {sender_name} | Recipient: {config['recipient']}"
@@ -387,6 +408,7 @@ async def handler(event: events.NewMessage.Event) -> None:
         add_to_user_cache(sender_id, text)
 
         await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
+        logging.info(f"HANDLER END total={(getnow() - started_at).total_seconds():.3f}s")
 
 
 async def run_bot() -> None:
