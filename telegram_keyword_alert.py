@@ -372,7 +372,7 @@ async def handler(event: events.NewMessage.Event) -> None:
         logging.info(f"before get_chat +{(getnow() - started_at).total_seconds():.3f}s")
         chat = await event.get_chat()
         logging.info(f"after get_chat +{(getnow() - started_at).total_seconds():.3f}s")
-        
+
         chat_title = getattr(chat, "title", "")
         sender_name = getattr(sender, "first_name", "пользователь")
         sender_link = f"[{sender_name}](tg://user?id={sender_id})"
