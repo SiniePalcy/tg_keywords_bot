@@ -17,14 +17,6 @@ from typing import Optional
 user_message_cache = defaultdict(list)
 last_sent: dict[int, datetime] = {}
 
-seqlog.log_to_seq(
-    server_url="http://127.0.0.1:5341",
-    api_key=None,  # set if you created an API key in Seq
-    level=logging.INFO,
-    auto_flush_timeout=1,
-    override_root_logger=True,  # attach handler to root logger
-)
-
 load_dotenv()
 
 api_id_str = os.getenv("API_ID")
@@ -40,6 +32,21 @@ DELAY_BETWEEN_MESSAGES = 0.25
 DELAY_TOO_MANY_REQUESTS = 30
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TRANSFER_IMAGE_PATH = os.path.join(BASE_DIR, "transfer.jpg")
+SEQ_URL = os.getenv("SEQ_URL")
+
+if SEQ_URL:
+    seqlog.log_to_seq(
+        server_url=SEQ_URL,
+        api_key=None,
+        level=logging.INFO,
+        auto_flush_timeout=1,
+        override_root_logger=True,
+    )
+else:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s"
+    )
 
 CONFIGS = [
     {
