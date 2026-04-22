@@ -292,7 +292,19 @@ async def handle_transfer_offer(
 @client.on(events.NewMessage)
 async def handler(event: events.NewMessage.Event) -> None:
     started_at = getnow()
-    logging.info(f"HANDLER START chat_id={event.chat_id} event_id={event.id} at={started_at.isoformat()}")
+
+    event_time_utc = event.message.date
+    event_time_local = event_time_utc.astimezone(ZoneInfo("Europe/Podgorica"))
+    lag = (started_at - event_time_local).total_seconds()
+
+    logging.info(
+        "HANDLER START chat_id=%s event_id=%s msg_time_local=%s handler_now=%s lag_sec=%.3f",
+        event.chat_id,
+        event.id,
+        event_time_local.isoformat(),
+        started_at.isoformat(),
+        lag,
+    )
 
     event_time = event.message.date
     logging.info(f"event.message.date={event_time}")
@@ -388,7 +400,7 @@ async def handler(event: events.NewMessage.Event) -> None:
         )
 
         message = (
-            f"Сообщение в чате \"{chat_title}\" от {sender_link} в {started_at.strftime('%H:%M:%S')}:\n\n"
+            f"Сообщение в чате \"{chat_title}\" от {sender_link} в {event.message.date.strftime('%H:%M:%S')}:\n\n"
             f"{event.raw_text}"
         )
 
