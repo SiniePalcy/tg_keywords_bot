@@ -149,7 +149,14 @@ CONFIGS = [
 
 PERIOD_MINUTES = 5
 
-client = TelegramClient(session_name, api_id, api_hash)
+client = TelegramClient(
+    session_name,
+    api_id,
+    api_hash,
+    auto_reconnect=True,
+    connection_retries=-1,
+    retry_delay=5,
+)
 
 openAIclient = openai.AsyncOpenAI()
 
@@ -291,19 +298,23 @@ async def handle_transfer_offer(
 
 @client.on(events.NewMessage)
 async def handler(event: events.NewMessage.Event) -> None:
-    started_at = getnow()
+    global last_handler_start
 
-    event_time_utc = event.message.date
-    event_time_local = event_time_utc.astimezone(ZoneInfo("Europe/Podgorica"))
-    lag = (started_at - event_time_local).total_seconds()
+    started_at = getnow()
+    msg_time_local = event.message.date.astimezone(ZoneInfo("Europe/Podgorica"))
+    lag_sec = (started_at - msg_time_local).total_seconds()
+
+    since_prev = None if last_handler_start is None else (started_at - last_handler_start).total_seconds()
+    last_handler_start = started_at
 
     logging.info(
-        "HANDLER START chat_id=%s event_id=%s msg_time_local=%s handler_now=%s lag_sec=%.3f",
+        "HANDLER START chat_id=%s event_id=%s msg_time_local=%s handler_now=%s lag_sec=%.3f since_prev=%.3f",
         event.chat_id,
         event.id,
-        event_time_local.isoformat(),
+        msg_time_local.isoformat(),
         started_at.isoformat(),
-        lag,
+        lag_sec,
+        since_prev if since_prev is not None else -1.0,
     )
 
     event_time = event.message.date
@@ -459,10 +470,19 @@ async def clear_cache_at_midnight() -> None:
         last_sent.clear()
         logging.info("🧹 Message cache is cleared at midnight UTC")
 
+async def heartbeat():
+    while True:
+        try:
+            me = await client.get_me()
+            logging.info("HEARTBEAT ok user_id=%s", me.id)
+        except Exception:
+            logging.exception("HEARTBEAT failed")
+        await asyncio.sleep(60)
 
 async def main() -> None:
     try:
         asyncio.create_task(clear_cache_at_midnight())
+        asyncio.create_task(heartbeat())
         await run_bot()
     except (KeyboardInterrupt, SystemExit):
         logging.info("⚠️ KeyboardInterrupt — shutting down...")
