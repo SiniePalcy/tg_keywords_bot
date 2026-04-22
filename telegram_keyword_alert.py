@@ -158,6 +158,8 @@ client = TelegramClient(
     retry_delay=5,
 )
 
+last_handler_start = getnow()
+
 openAIclient = openai.AsyncOpenAI()
 
 
@@ -298,8 +300,6 @@ async def handle_transfer_offer(
 
 @client.on(events.NewMessage)
 async def handler(event: events.NewMessage.Event) -> None:
-    global last_handler_start
-
     started_at = getnow()
     msg_time_local = event.message.date.astimezone(ZoneInfo("Europe/Podgorica"))
     lag_sec = (started_at - msg_time_local).total_seconds()
@@ -319,7 +319,6 @@ async def handler(event: events.NewMessage.Event) -> None:
 
     event_time = event.message.date
     logging.info(f"event.message.date={event_time}")
-    logging.info(f"handler_now={getnow().isoformat()}")
 
     sender = await event.get_sender()
     logging.info(f"after get_sender +{(getnow() - started_at).total_seconds():.3f}s")
