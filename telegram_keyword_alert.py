@@ -470,6 +470,7 @@ async def clear_cache_at_midnight() -> None:
         last_sent.clear()
         logging.info("🧹 Message cache is cleared at midnight UTC")
 
+
 async def heartbeat():
     while True:
         try:
@@ -478,6 +479,7 @@ async def heartbeat():
         except Exception:
             logging.exception("HEARTBEAT failed")
         await asyncio.sleep(60)
+
 
 async def main() -> None:
     try:
