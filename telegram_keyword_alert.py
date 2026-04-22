@@ -388,7 +388,7 @@ async def handler(event: events.NewMessage.Event) -> None:
         )
 
         message = (
-            f"Сообщение в чате \"{chat_title}\" от {sender_link} в {now.strftime('%H:%M:%S')}:\n\n"
+            f"Сообщение в чате \"{chat_title}\" от {sender_link} в {started_at.strftime('%H:%M:%S')}:\n\n"
             f"{event.raw_text}"
         )
 
