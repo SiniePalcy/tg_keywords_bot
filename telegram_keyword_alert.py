@@ -472,7 +472,7 @@ async def clear_cache_at_midnight() -> None:
         logging.info("🧹 Message cache is cleared at midnight UTC")
 
 
-async def heartbeat():
+async def heartbeat() -> None:
     while True:
         try:
             me = await client.get_me()
