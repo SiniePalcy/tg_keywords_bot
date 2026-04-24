@@ -5,9 +5,9 @@ import re
 import seqlog
 import openai
 import numpy as np
+
 from telethon import TelegramClient, events
 from telethon.errors import PeerFloodError
-from telethon.tl.types import User
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from collections import defaultdict
@@ -16,20 +16,38 @@ from typing import Optional
 
 user_message_cache = defaultdict(list)
 last_sent: dict[int, datetime] = {}
+chat_title_cache: dict[int, str] = {}
+chat_username_cache: dict[int, str] = {}
+
+cache_lock = asyncio.Lock()
+last_sent_lock = asyncio.Lock()
+metrics_lock = asyncio.Lock()
+
+
+class State:
+    last_handler_start: Optional[datetime] = None
+
+
+state = State()
 
 load_dotenv()
 
 api_id_str = os.getenv("API_ID")
 if api_id_str is None:
     raise ValueError("API_ID not set")
+
 api_id = int(api_id_str)
 api_hash = os.getenv("API_HASH")
 session_name = "keyword_alert_notification"
+
 openai.api_key = os.getenv("OPENAI_API_KEY")
+openAIclient = openai.AsyncOpenAI()
 
 ENABLE_SEMANTIC_FILTER = os.getenv("ENABLE_SEMANTIC_FILTER", "False").lower() == "true"
-DELAY_BETWEEN_MESSAGES = 0.25
+
 DELAY_TOO_MANY_REQUESTS = 30
+MIN_SECONDS_BETWEEN_NOTIFICATIONS = int(os.getenv("MIN_SECONDS_BETWEEN_NOTIFICATIONS", "3"))
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TRANSFER_IMAGE_PATH = os.path.join(BASE_DIR, "transfer.jpg")
 SEQ_URL = os.getenv("SEQ_URL")
@@ -45,7 +63,7 @@ if SEQ_URL:
 else:
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s"
+        format="%(asctime)s %(levelname)s %(message)s",
     )
 
 CONFIGS = [
@@ -155,12 +173,9 @@ client = TelegramClient(
     api_hash,
     auto_reconnect=True,
     connection_retries=-1,
-    retry_delay=5,
+    retry_delay=2,
+    sequential_updates=False,
 )
-
-last_handler_start: Optional[datetime] = None
-
-openAIclient = openai.AsyncOpenAI()
 
 
 def normalize_text(text: str) -> str:
@@ -175,9 +190,14 @@ def getnow() -> datetime:
     return datetime.now(ZoneInfo("Europe/Podgorica"))
 
 
-def add_to_user_cache(user_id: int, normalized_text: str) -> None:
-    now = getnow()
-    user_message_cache[user_id].append((normalized_text, now))
+async def get_recent_messages(user_id: int) -> list[tuple[str, datetime]]:
+    async with cache_lock:
+        return list(user_message_cache[user_id])
+
+
+async def add_to_user_cache(user_id: int, normalized_text: str) -> None:
+    async with cache_lock:
+        user_message_cache[user_id].append((normalized_text, getnow()))
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -186,55 +206,74 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 async def get_embedding(text: str) -> np.ndarray:
     response = await openAIclient.embeddings.create(
-        input=text, model="text-embedding-3-small"
+        input=text,
+        model="text-embedding-3-small",
     )
     return np.array(response.data[0].embedding)
 
 
 async def is_semantically_duplicate(user_id: int, text: str) -> bool:
     try:
-        new_embedding = np.array(await get_embedding(text))
+        new_embedding = await get_embedding(text)
+        recent_messages = await get_recent_messages(user_id)
 
-        for prev_text, _ in user_message_cache[user_id]:
-            prev_embedding = np.array(await get_embedding(prev_text))
+        for prev_text, _ in recent_messages:
+            prev_embedding = await get_embedding(prev_text)
             sim = cosine_similarity(new_embedding, prev_embedding)
+
             if sim > 0.9:
-                logging.info(f"🔁 Семантический дубликат от пользователя {user_id}")
+                logging.info("🔁 Семантический дубликат от пользователя %s", user_id)
                 return True
-    except Exception as e:
-        logging.warning(f"Ошибка при семантическом сравнении: {e}")
+
+    except Exception:
+        logging.exception("Ошибка при семантическом сравнении")
+
     return False
 
 
 async def send_message_safe(recipient: int, message: str) -> bool:
     started_at = getnow()
-    now = started_at
 
-    if recipient in last_sent and now - last_sent[recipient] < timedelta(seconds=60):
-        logging.info(f"Too soon to message {recipient}")
-        return False
+    async with last_sent_lock:
+        now = getnow()
+
+        if (
+            MIN_SECONDS_BETWEEN_NOTIFICATIONS > 0
+            and recipient in last_sent
+            and now - last_sent[recipient] < timedelta(seconds=MIN_SECONDS_BETWEEN_NOTIFICATIONS)
+        ):
+            logging.info("Too soon to message %s", recipient)
+            return False
+
+        last_sent[recipient] = now
 
     try:
-        logging.info(f"send_message_safe: sending to {recipient}")
+        logging.info("send_message_safe: sending to %s", recipient)
         await client.send_message(recipient, message, parse_mode="markdown")
-        last_sent[recipient] = getnow()
+
         logging.info(
-            f"send_message_safe: sent to {recipient} in {(getnow() - started_at).total_seconds():.3f}s"
+            "send_message_safe: sent to %s in %.3fs",
+            recipient,
+            (getnow() - started_at).total_seconds(),
         )
         return True
+
     except PeerFloodError:
         logging.warning("Hit PeerFloodError — backing off")
         await asyncio.sleep(DELAY_TOO_MANY_REQUESTS)
         return False
+
     except Exception:
-        logging.exception(f"Failed to send message to {recipient}")
+        logging.exception("Failed to send message to %s", recipient)
         return False
 
 
 async def handle_transfer_offer(
-    event: events.NewMessage.Event, raw_text: str, prefix_used: str
+    event: events.NewMessage.Event,
+    raw_text: str,
+    prefix_used: str,
 ) -> None:
-    rest = raw_text[len(prefix_used) :].strip(" :,-")
+    rest = raw_text[len(prefix_used):].strip(" :,-")
 
     if not event.is_reply:
         await event.reply("Команда должна быть ответом на сообщение бота с метаданными")
@@ -245,22 +284,14 @@ async def handle_transfer_offer(
         await event.reply("Не удалось получить сообщение, на которое вы отвечали.")
         return
 
-    target_user_id: Optional[int] = None
-
     reply_text = reply_msg.raw_text or ""
     match = re.search(r"USER_ID:(\d+)", reply_text)
-    if match is not None:
-        try:
-            target_user_id = int(match.group(1))
-        except ValueError:
-            logging.warning(f"Не удалось распарсить USER_ID из текста: {reply_text!r}")
 
-    if target_user_id is None:
-        await event.reply(
-            "Не нашёл USER_ID в уведомлении. "
-            "Скорее всего, вы отвечаете на старое сообщение бота или не на то уведомление."
-        )
+    if match is None:
+        await event.reply("Не нашёл USER_ID в уведомлении.")
         return
+
+    target_user_id = int(match.group(1))
 
     if not rest:
         await event.reply("Добавьте описание: например `предложи попутку Бар — Будва`")
@@ -270,44 +301,60 @@ async def handle_transfer_offer(
         "предложить попутку"
     )
 
-    if is_carpool:
-        # 💬 Попутка — только текст, без фото
-        caption = f"Здравствуйте. Могу предложить вам попутный трансфер {rest}."
-        try:
+    try:
+        if is_carpool:
+            caption = f"Здравствуйте. Могу предложить вам попутный трансфер {rest}."
             await client.send_message(target_user_id, caption)
-            await event.reply("Отправлено")
-        except Exception as e:
-            logging.exception(e)
-            await event.reply("Не получилось отправить сообщение клиенту ")
-    else:
-        # 🚗 Обычный трансфер — фото + текст
-        caption = (
-            f"Здравствуйте. Могу предложить трансфер {rest}. "
-            f"Машина 2019 года, кондиционер, багажник 400 литров, хетчбек. "
-            f"В салоне не курят. Включаю музыку по запросу, работает CarPlay."
-        )
-        try:
-            await client.send_file(
-                target_user_id,
-                TRANSFER_IMAGE_PATH,
-                caption=caption,
+        else:
+            caption = (
+                f"Здравствуйте. Могу предложить трансфер {rest}. "
+                f"Машина 2019 года, кондиционер, багажник 400 литров, хетчбек. "
+                f"В салоне не курят. Включаю музыку по запросу, работает CarPlay."
             )
-            await event.reply("Отправлено")
-        except Exception as e:
-            logging.exception(e)
-            await event.reply("Не получилось отправить сообщение")
+            await client.send_file(target_user_id, TRANSFER_IMAGE_PATH, caption=caption)
+
+        await event.reply("Отправлено")
+
+    except Exception:
+        logging.exception("Не получилось отправить сообщение клиенту")
+        await event.reply("Не получилось отправить сообщение")
 
 
 @client.on(events.NewMessage)
 async def handler(event: events.NewMessage.Event) -> None:
-    global last_handler_start
+    task = asyncio.create_task(process_event_safe(event))
+    task.add_done_callback(log_task_exception)
 
+
+def log_task_exception(task: asyncio.Task) -> None:
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        logging.exception("Unhandled exception in process_event task")
+
+
+async def process_event_safe(event: events.NewMessage.Event) -> None:
+    try:
+        await process_event(event)
+    except Exception:
+        logging.exception("process_event failed")
+
+
+async def process_event(event: events.NewMessage.Event) -> None:
     started_at = getnow()
+
     msg_time_local = event.message.date.astimezone(ZoneInfo("Europe/Podgorica"))
     lag_sec = (started_at - msg_time_local).total_seconds()
 
-    since_prev = None if last_handler_start is None else (started_at - last_handler_start).total_seconds()
-    last_handler_start = started_at
+    async with metrics_lock:
+        since_prev = (
+            None
+            if state.last_handler_start is None
+            else (started_at - state.last_handler_start).total_seconds()
+        )
+        state.last_handler_start = started_at
 
     logging.info(
         "HANDLER START chat_id=%s event_id=%s msg_time_local=%s handler_now=%s lag_sec=%.3f since_prev=%.3f",
@@ -319,23 +366,19 @@ async def handler(event: events.NewMessage.Event) -> None:
         since_prev if since_prev is not None else -1.0,
     )
 
-    event_time = event.message.date
-    logging.info(f"event.message.date={event_time}")
-
-    sender = await event.get_sender()
-    logging.info(f"after get_sender +{(getnow() - started_at).total_seconds():.3f}s")
-
-    if not isinstance(sender, User) or sender.bot:
+    sender_id = event.sender_id
+    if sender_id is None:
         return
 
-    sender_id = sender.id
     raw_text = (event.raw_text or "").strip()
+    if not raw_text:
+        return
 
     alert_recipients = {
         cfg["recipient"] for cfg in CONFIGS if isinstance(cfg.get("recipient"), int)
     }
 
-    if sender_id in alert_recipients and event.is_reply and raw_text:
+    if sender_id in alert_recipients and event.is_reply:
         lower = raw_text.lower()
         prefixes = (
             "предложи трансфер",
@@ -350,70 +393,72 @@ async def handler(event: events.NewMessage.Event) -> None:
             return
 
     text = normalize_text(raw_text)
+    recent_messages = await get_recent_messages(sender_id)
 
-    config: dict[str, object]
     for config in CONFIGS:
-        if isinstance(config["chats"], set) and event.chat_id not in config["chats"]:
+        chats = config.get("chats", set())
+        if isinstance(chats, set) and event.chat_id not in chats:
             continue
 
         excluded_senders = config.get("excluded_senders", [])
         if isinstance(excluded_senders, list) and sender_id in excluded_senders:
             continue
 
-        recent_messages = user_message_cache[sender_id]
         if any(prev_text == text for prev_text, _ in recent_messages):
-            logging.info(f"⛔ Повтор от пользователя {sender_id}: {text}")
+            logging.info("⛔ Повтор от пользователя %s: %s", sender_id, text)
             continue
 
         keywords = config.get("keywords", [])
-        matched = (
-            any(word in text for word in keywords)
-            if isinstance(keywords, list)
-            else False
-        )
+        matched = any(word in text for word in keywords) if isinstance(keywords, list) else False
+
         is_question = "?" in raw_text
-        if not (matched or (config.get("include_questions") and is_question)):
+        include_questions = bool(config.get("include_questions"))
+
+        if not (matched or (include_questions and is_question)):
             continue
 
         excluded_keywords = config.get("excluded_keywords", [])
         if isinstance(excluded_keywords, list) and any(
             block_word in text for block_word in excluded_keywords
         ):
-            logging.info(f"⛔ Игнор по слову для пользователя {sender_id}:{text}")
+            logging.info("⛔ Игнор по слову для пользователя %s: %s", sender_id, text)
             continue
 
         now = getnow()
-        if any(
-            (now - ts) < timedelta(minutes=PERIOD_MINUTES) for _, ts in recent_messages
-        ):
+        if any((now - ts) < timedelta(minutes=PERIOD_MINUTES) for _, ts in recent_messages):
             logging.info(
-                f"⏱️ Игнор: пользователь {sender_id} уже писал за последние {PERIOD_MINUTES} минут"
+                "⏱️ Игнор: пользователь %s уже писал за последние %s минут",
+                sender_id,
+                PERIOD_MINUTES,
             )
             continue
 
-        # if ENABLE_SEMANTIC_FILTER and await is_semantically_duplicate(sender_id, text):
-        #    logging.info(f"⛔ Игнор: пользователь {sender_id} уже писал об" f"этом")
-        #    continue
+        if ENABLE_SEMANTIC_FILTER and await is_semantically_duplicate(sender_id, text):
+            logging.info("⛔ Игнор: пользователь %s уже писал об этом", sender_id)
+            continue
 
-        logging.info(f"before get_chat +{(getnow() - started_at).total_seconds():.3f}s")
-        chat = await event.get_chat()
-        logging.info(f"after get_chat +{(getnow() - started_at).total_seconds():.3f}s")
+        chat_id = event.chat_id
+        chat_title = chat_title_cache.get(chat_id, str(chat_id))
+        chat_username = chat_username_cache.get(chat_id)
 
-        chat_title = getattr(chat, "title", "")
-        sender_name = getattr(sender, "first_name", "пользователь")
+        sender_name = f"user_{sender_id}"
         sender_link = f"[{sender_name}](tg://user?id={sender_id})"
-        message_link = None
 
-        if hasattr(chat, "username") and chat.username:
-            message_link = f"https://t.me/{chat.username}/{event.id}"
+        message_link = None
+        if chat_username:
+            message_link = f"https://t.me/{chat_username}/{event.id}"
 
         logging.info(
-            f"[🔔] Chat: {chat_title} | Sender: {sender_name} | Msg:{event.raw_text}"
+            "[🔔] Chat: %s | SenderId: %s | Msg: %s",
+            chat_title,
+            sender_id,
+            raw_text,
         )
 
         message = (
-            f"Сообщение в чате \"{chat_title}\" от {sender_link} в {event.message.date.strftime('%H:%M:%S')}:\n\n"
-            f"{event.raw_text}"
+            f"Сообщение в чате \"{chat_title}\" от {sender_link} "
+            f"в {msg_time_local.strftime('%H:%M:%S')}:\n\n"
+            f"{raw_text}"
         )
 
         if message_link:
@@ -421,30 +466,77 @@ async def handler(event: events.NewMessage.Event) -> None:
 
         message += f"\nUSER_ID:{sender_id}"
 
-        if isinstance(config["recipient"], int):
-            logging.info(f"before send_message_safe +{(getnow() - started_at).total_seconds():.3f}s")
-            sent = await send_message_safe(config["recipient"], message)
-            logging.info(f"after send_message_safe +{(getnow() - started_at).total_seconds():.3f}s sent={sent}")
+        recipient = config.get("recipient")
+        if isinstance(recipient, int):
+            logging.info(
+                "before send_message_safe +%.3fs",
+                (getnow() - started_at).total_seconds(),
+            )
+
+            sent = await send_message_safe(recipient, message)
+
+            logging.info(
+                "after send_message_safe +%.3fs sent=%s",
+                (getnow() - started_at).total_seconds(),
+                sent,
+            )
 
             if sent:
                 logging.info(
-                    f"Message sent | Sender: {sender_name} | Recipient: {config['recipient']}"
+                    "Message sent | SenderId: %s | Recipient: %s",
+                    sender_id,
+                    recipient,
                 )
 
-        add_to_user_cache(sender_id, text)
+        await add_to_user_cache(sender_id, text)
 
-        await asyncio.sleep(DELAY_BETWEEN_MESSAGES)
-        logging.info(f"HANDLER END total={(getnow() - started_at).total_seconds():.3f}s")
+        logging.info(
+            "HANDLER END total=%.3fs",
+            (getnow() - started_at).total_seconds(),
+        )
+
+
+async def preload_chats() -> None:
+    chat_ids: set[int] = set()
+
+    for cfg in CONFIGS:
+        chats = cfg.get("chats", set())
+        if isinstance(chats, set):
+            chat_ids.update(chats)
+
+    for chat_id in chat_ids:
+        try:
+            entity = await client.get_entity(chat_id)
+
+            title = getattr(entity, "title", str(chat_id))
+            username = getattr(entity, "username", None)
+
+            chat_title_cache[chat_id] = title
+
+            if username:
+                chat_username_cache[chat_id] = username
+
+            logging.info(
+                "Preloaded chat %s title=%s username=%s",
+                chat_id,
+                title,
+                username,
+            )
+
+        except Exception:
+            logging.exception("Failed to preload chat %s", chat_id)
 
 
 async def run_bot() -> None:
     await client.start()
 
+    await preload_chats()
+
     now = getnow().strftime("%d-%m-%Y %H:%M:%S")
-    logging.info(f"🧾 Bot run at {now}")
+    logging.info("🧾 Bot run at %s", now)
 
     me = await client.get_me()
-    logging.info(f"🧾 Signed in as {me.first_name} (bot={me.bot})")
+    logging.info("🧾 Signed in as %s (bot=%s)", me.first_name, me.bot)
     logging.info("✅ Bot is running. Waiting for messages...")
 
     await client.run_until_disconnected()
@@ -452,7 +544,7 @@ async def run_bot() -> None:
 
 async def shutdown() -> None:
     now = getnow().strftime("%d-%m-%Y %H:%M:%S")
-    logging.info(f"🧾 Bot stopped at {now}")
+    logging.info("🧾 Bot stopped at %s", now)
     await client.disconnect()
 
 
@@ -460,16 +552,24 @@ async def clear_cache_at_midnight() -> None:
     while True:
         now = getnow()
         tomorrow = (now + timedelta(days=1)).replace(
-            hour=0, minute=0, second=0, microsecond=0
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
         )
+
         seconds_until_midnight = (tomorrow - now).total_seconds()
 
-        logging.info(f"⏳ Clearing cache after {int(seconds_until_midnight)} seconds")
+        logging.info("⏳ Clearing cache after %s seconds", int(seconds_until_midnight))
         await asyncio.sleep(seconds_until_midnight)
 
-        user_message_cache.clear()
-        last_sent.clear()
-        logging.info("🧹 Message cache is cleared at midnight UTC")
+        async with cache_lock:
+            user_message_cache.clear()
+
+        async with last_sent_lock:
+            last_sent.clear()
+
+        logging.info("🧹 Message cache is cleared at midnight Europe/Podgorica")
 
 
 async def heartbeat() -> None:
@@ -479,6 +579,7 @@ async def heartbeat() -> None:
             logging.info("HEARTBEAT ok user_id=%s", me.id)
         except Exception:
             logging.exception("HEARTBEAT failed")
+
         await asyncio.sleep(60)
 
 
