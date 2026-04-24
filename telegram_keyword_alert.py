@@ -442,6 +442,20 @@ async def process_event(event: events.NewMessage.Event) -> None:
         chat_username = chat_username_cache.get(chat_id)
 
         sender_name = f"user_{sender_id}"
+
+        try:
+            sender = await event.get_sender()
+            first_name = getattr(sender, "first_name", None)
+            last_name = getattr(sender, "last_name", None)
+
+            full_name = " ".join(x for x in [first_name, last_name] if x)
+
+            if full_name:
+                sender_name = full_name
+
+        except Exception:
+            logging.exception("Failed to get sender name for user_id=%s", sender_id)
+
         sender_link = f"[{sender_name}](tg://user?id={sender_id})"
 
         message_link = None
@@ -574,9 +588,18 @@ async def clear_cache_at_midnight() -> None:
 
 async def heartbeat() -> None:
     while True:
+        started_at = getnow()
+
         try:
             me = await client.get_me()
-            logging.info("HEARTBEAT ok user_id=%s", me.id)
+            elapsed = (getnow() - started_at).total_seconds()
+
+            logging.info(
+                "HEARTBEAT ok user_id=%s elapsed=%.3fs",
+                me.id,
+                elapsed,
+            )
+
         except Exception:
             logging.exception("HEARTBEAT failed")
 
