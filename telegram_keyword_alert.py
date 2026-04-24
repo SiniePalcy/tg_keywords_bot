@@ -38,7 +38,7 @@ if api_id_str is None:
 
 api_id = int(api_id_str)
 api_hash = os.getenv("API_HASH")
-session_name = "keyword_alert_notification_v2"
+session_name = "keyword_alert_notification"
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 openAIclient = openai.AsyncOpenAI()
@@ -545,6 +545,8 @@ async def preload_chats() -> None:
 async def run_bot() -> None:
     await client.start()
 
+    asyncio.create_task(heartbeat())
+
     await preload_chats()
 
     now = getnow().strftime("%d-%m-%Y %H:%M:%S")
@@ -610,7 +612,6 @@ async def heartbeat() -> None:
 async def main() -> None:
     try:
         asyncio.create_task(clear_cache_at_midnight())
-        asyncio.create_task(heartbeat())
         await run_bot()
     except (KeyboardInterrupt, SystemExit):
         logging.info("⚠️ KeyboardInterrupt — shutting down...")
