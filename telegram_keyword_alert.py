@@ -38,7 +38,7 @@ if api_id_str is None:
 
 api_id = int(api_id_str)
 api_hash = os.getenv("API_HASH")
-session_name = "keyword_alert_notification"
+session_name = "keyword_alert_notification_v2"
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 openAIclient = openai.AsyncOpenAI()
@@ -175,6 +175,7 @@ client = TelegramClient(
     connection_retries=-1,
     retry_delay=2,
     sequential_updates=False,
+    catch_up=False,
 )
 
 
