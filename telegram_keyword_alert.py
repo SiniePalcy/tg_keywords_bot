@@ -14,7 +14,7 @@ from collections import defaultdict
 from zoneinfo import ZoneInfo
 from typing import Optional
 
-user_message_cache = defaultdict(list)
+user_message_cache: dict[int, list[tuple[str, datetime]]] = defaultdict(list)
 last_sent: dict[int, datetime] = {}
 chat_title_cache: dict[int, str] = {}
 chat_username_cache: dict[int, str] = {}
