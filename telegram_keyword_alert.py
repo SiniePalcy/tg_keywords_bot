@@ -375,7 +375,8 @@ async def process_command_event_safe(event: events.NewMessage.Event) -> None:
     except Exception:
         logging.exception("process_command_event failed")
 
-        def get_all_chat_ids() -> set[int]:
+
+def get_all_chat_ids() -> set[int]:
     chat_ids: set[int] = set()
 
     for cfg in CONFIGS:
