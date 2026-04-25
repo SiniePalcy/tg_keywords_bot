@@ -508,7 +508,7 @@ async def process_message_data(
         state.last_handler_start = started_at
 
     logging.info(
-        "MESSAGE START source=%s chat_id=%s message_id=%s msg_time_local=%s handler_now=%s lag_sec=%.3f since_prev=%.3f",
+        "MSG START source=%s chat_id=%s message_id=%s msg_time_local=%s handler_now=%s lag_sec=%.3f since_prev=%.3f",
         source,
         chat_id,
         message_id,
@@ -612,7 +612,7 @@ async def process_message_data(
         await add_to_user_cache(sender_id, text)
 
         logging.info(
-            "MESSAGE END source=%s total=%.3fs",
+            "MSG END source=%s total=%.3fs",
             source,
             (getnow() - started_at).total_seconds(),
         )
@@ -640,7 +640,7 @@ async def get_sender_name(sender_id: int, message_obj: object | None) -> str:
     except Exception:
         logging.exception("Failed to get sender name for user_id=%s", sender_id)
 
-    return sender_name            
+    return sender_name
 
 
 def log_task_exception(task: asyncio.Task) -> None:
