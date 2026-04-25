@@ -335,15 +335,6 @@ async def handler(event: events.NewMessage.Event) -> None:
     task.add_done_callback(log_task_exception)
 
 
-def log_task_exception(task: asyncio.Task) -> None:
-    try:
-        task.result()
-    except asyncio.CancelledError:
-        pass
-    except Exception:
-        logging.exception("Unhandled exception in task")
-
-
 async def process_command_event_safe(event: events.NewMessage.Event) -> None:
     try:
         sender_id = event.sender_id
