@@ -26,6 +26,7 @@ metrics_lock = asyncio.Lock()
 poll_last_seen: dict[int, int] = {}
 poll_lock = asyncio.Lock()
 
+
 class State:
     last_handler_start: Optional[datetime] = None
 
