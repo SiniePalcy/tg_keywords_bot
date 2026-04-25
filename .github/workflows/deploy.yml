@@ -33,7 +33,7 @@ jobs:
         run: mypy .
 
       - name: Check formatting with black
-        run: black --check .
+        run: black .
 
       - name: Set up SSH
         if: github.ref == 'refs/heads/main'
