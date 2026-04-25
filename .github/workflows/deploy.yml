@@ -1,47 +1,53 @@
-name: Deploy to VPS
+name: Build and Deploy to VPS
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - v1
+      - v2
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-dev.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
-    - name: Run flake8 (code style)
-      run: flake8 .
+      - name: Run flake8
+        run: flake8 .
 
-    - name: Run mypy (type checks)
-      run: mypy .
+      - name: Run mypy
+        run: mypy .
 
-    - name: Check formatting with black
-      run: black .
+      - name: Check formatting with black
+        run: black .
 
-    - name: Set up SSH
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.VPS_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+      - name: Set up SSH
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-    - name: Deploy code and restart service
-      run: |
-        ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "\
-          cd ~/git/tg_keywords_bot && \
-          git pull && \
-          systemctl restart tgkeywordsbot"
+      - name: Deploy code and restart service
+        if: github.ref == 'refs/heads/main'
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "\
+            cd ~/git/tg_keywords_bot && \
+            git fetch origin main && \
+            git reset --hard origin/main && \
+            systemctl restart tgkeywordsbot"
