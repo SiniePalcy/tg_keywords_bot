@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+import random
 import seqlog
 import openai
 import numpy as np
@@ -427,7 +428,7 @@ async def poll_chats() -> None:
             elapsed,
         )
 
-        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+        await asyncio.sleep(POLL_INTERVAL_SECONDS + random.uniform(0, 2))
 
 
 async def poll_chat(chat_id: int) -> None:
