@@ -23,6 +23,8 @@ cache_lock = asyncio.Lock()
 last_sent_lock = asyncio.Lock()
 metrics_lock = asyncio.Lock()
 
+poll_last_seen: dict[int, int] = {}
+poll_lock = asyncio.Lock()
 
 class State:
     last_handler_start: Optional[datetime] = None
@@ -51,6 +53,9 @@ MIN_SECONDS_BETWEEN_NOTIFICATIONS = int(os.getenv("MIN_SECONDS_BETWEEN_NOTIFICAT
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TRANSFER_IMAGE_PATH = os.path.join(BASE_DIR, "transfer.jpg")
 SEQ_URL = os.getenv("SEQ_URL")
+
+POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "10"))
+POLL_LIMIT = int(os.getenv("POLL_LIMIT", "50"))
 
 if SEQ_URL:
     seqlog.log_to_seq(
@@ -323,7 +328,9 @@ async def handle_transfer_offer(
 
 @client.on(events.NewMessage)
 async def handler(event: events.NewMessage.Event) -> None:
-    task = asyncio.create_task(process_event_safe(event))
+    # NewMessage оставляем только для reply-команд:
+    # "предложи трансфер", "предложи попутку"
+    task = asyncio.create_task(process_command_event_safe(event))
     task.add_done_callback(log_task_exception)
 
 
@@ -333,53 +340,26 @@ def log_task_exception(task: asyncio.Task) -> None:
     except asyncio.CancelledError:
         pass
     except Exception:
-        logging.exception("Unhandled exception in process_event task")
+        logging.exception("Unhandled exception in task")
 
 
-async def process_event_safe(event: events.NewMessage.Event) -> None:
+async def process_command_event_safe(event: events.NewMessage.Event) -> None:
     try:
-        await process_event(event)
-    except Exception:
-        logging.exception("process_event failed")
+        sender_id = event.sender_id
+        if sender_id is None:
+            return
 
+        raw_text = (event.raw_text or "").strip()
+        if not raw_text:
+            return
 
-async def process_event(event: events.NewMessage.Event) -> None:
-    started_at = getnow()
+        alert_recipients = {
+            cfg["recipient"] for cfg in CONFIGS if isinstance(cfg.get("recipient"), int)
+        }
 
-    msg_time_local = event.message.date.astimezone(ZoneInfo("Europe/Podgorica"))
-    lag_sec = (started_at - msg_time_local).total_seconds()
+        if sender_id not in alert_recipients or not event.is_reply:
+            return
 
-    async with metrics_lock:
-        since_prev = (
-            None
-            if state.last_handler_start is None
-            else (started_at - state.last_handler_start).total_seconds()
-        )
-        state.last_handler_start = started_at
-
-    logging.info(
-        "HANDLER START chat_id=%s event_id=%s msg_time_local=%s handler_now=%s lag_sec=%.3f since_prev=%.3f",
-        event.chat_id,
-        event.id,
-        msg_time_local.isoformat(),
-        started_at.isoformat(),
-        lag_sec,
-        since_prev if since_prev is not None else -1.0,
-    )
-
-    sender_id = event.sender_id
-    if sender_id is None:
-        return
-
-    raw_text = (event.raw_text or "").strip()
-    if not raw_text:
-        return
-
-    alert_recipients = {
-        cfg["recipient"] for cfg in CONFIGS if isinstance(cfg.get("recipient"), int)
-    }
-
-    if sender_id in alert_recipients and event.is_reply:
         lower = raw_text.lower()
         prefixes = (
             "предложи трансфер",
@@ -391,14 +371,173 @@ async def process_event(event: events.NewMessage.Event) -> None:
         prefix_used = next((p for p in prefixes if lower.startswith(p)), None)
         if prefix_used:
             await handle_transfer_offer(event, raw_text, prefix_used)
-            return
+
+    except Exception:
+        logging.exception("process_command_event failed")
+
+        def get_all_chat_ids() -> set[int]:
+    chat_ids: set[int] = set()
+
+    for cfg in CONFIGS:
+        chats = cfg.get("chats", set())
+        if isinstance(chats, set):
+            chat_ids.update(chats)
+
+    return chat_ids
+
+
+async def initialize_poll_last_seen() -> None:
+    chat_ids = get_all_chat_ids()
+
+    for chat_id in chat_ids:
+        try:
+            messages = await client.get_messages(chat_id, limit=1)
+
+            if messages:
+                poll_last_seen[chat_id] = messages[0].id
+                logging.info(
+                    "Polling initialized chat_id=%s last_seen_id=%s",
+                    chat_id,
+                    messages[0].id,
+                )
+            else:
+                poll_last_seen[chat_id] = 0
+                logging.info("Polling initialized chat_id=%s empty", chat_id)
+
+        except Exception:
+            logging.exception("Failed to initialize polling for chat_id=%s", chat_id)
+
+
+async def poll_chats() -> None:
+    chat_ids = get_all_chat_ids()
+
+    logging.info(
+        "Polling started. chats=%s interval=%ss limit=%s",
+        len(chat_ids),
+        POLL_INTERVAL_SECONDS,
+        POLL_LIMIT,
+    )
+
+    while True:
+        started_at = getnow()
+
+        for chat_id in chat_ids:
+            try:
+                await poll_chat(chat_id)
+            except Exception:
+                logging.exception("Polling failed for chat_id=%s", chat_id)
+
+        elapsed = (getnow() - started_at).total_seconds()
+
+        logging.info(
+            "Polling iteration finished in %.3fs",
+            elapsed,
+        )
+
+        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+
+
+async def poll_chat(chat_id: int) -> None:
+    async with poll_lock:
+        last_seen_id = poll_last_seen.get(chat_id, 0)
+
+    newest_seen_id = last_seen_id
+    all_new_messages = []
+
+    while True:
+        messages = await client.get_messages(
+            chat_id,
+            min_id=newest_seen_id,
+            limit=POLL_LIMIT,
+        )
+
+        if not messages:
+            break
+
+        all_new_messages.extend(messages)
+
+        newest_seen_id = max(m.id for m in messages)
+
+        if len(messages) < POLL_LIMIT:
+            break
+
+    if not all_new_messages:
+        return
+
+    messages_sorted = sorted(all_new_messages, key=lambda m: m.id)
+
+    logging.info(
+        "Polling got %s new messages for chat_id=%s last_seen_id=%s newest_id=%s",
+        len(messages_sorted),
+        chat_id,
+        last_seen_id,
+        messages_sorted[-1].id,
+    )
+
+    for msg in messages_sorted:
+        await process_message_data(
+            source="poll",
+            chat_id=chat_id,
+            message_id=msg.id,
+            sender_id=msg.sender_id,
+            raw_text=msg.raw_text or "",
+            message_date=msg.date,
+            message_obj=msg,
+        )
+
+    async with poll_lock:
+        poll_last_seen[chat_id] = max(
+            poll_last_seen.get(chat_id, 0),
+            messages_sorted[-1].id,
+        )
+
+
+async def process_message_data(
+    source: str,
+    chat_id: int,
+    message_id: int,
+    sender_id: Optional[int],
+    raw_text: str,
+    message_date: datetime,
+    message_obj: object | None = None,
+) -> None:
+    started_at = getnow()
+
+    msg_time_local = message_date.astimezone(ZoneInfo("Europe/Podgorica"))
+    lag_sec = (started_at - msg_time_local).total_seconds()
+
+    async with metrics_lock:
+        since_prev = (
+            None
+            if state.last_handler_start is None
+            else (started_at - state.last_handler_start).total_seconds()
+        )
+        state.last_handler_start = started_at
+
+    logging.info(
+        "MESSAGE START source=%s chat_id=%s message_id=%s msg_time_local=%s handler_now=%s lag_sec=%.3f since_prev=%.3f",
+        source,
+        chat_id,
+        message_id,
+        msg_time_local.isoformat(),
+        started_at.isoformat(),
+        lag_sec,
+        since_prev if since_prev is not None else -1.0,
+    )
+
+    if sender_id is None:
+        return
+
+    raw_text = (raw_text or "").strip()
+    if not raw_text:
+        return
 
     text = normalize_text(raw_text)
     recent_messages = await get_recent_messages(sender_id)
 
     for config in CONFIGS:
         chats = config.get("chats", set())
-        if isinstance(chats, set) and event.chat_id not in chats:
+        if isinstance(chats, set) and chat_id not in chats:
             continue
 
         excluded_senders = config.get("excluded_senders", [])
@@ -438,30 +577,15 @@ async def process_event(event: events.NewMessage.Event) -> None:
             logging.info("⛔ Игнор: пользователь %s уже писал об этом", sender_id)
             continue
 
-        chat_id = event.chat_id
         chat_title = chat_title_cache.get(chat_id, str(chat_id))
         chat_username = chat_username_cache.get(chat_id)
 
-        sender_name = f"user_{sender_id}"
-
-        try:
-            sender = await event.get_sender()
-            first_name = getattr(sender, "first_name", None)
-            last_name = getattr(sender, "last_name", None)
-
-            full_name = " ".join(x for x in [first_name, last_name] if x)
-
-            if full_name:
-                sender_name = full_name
-
-        except Exception:
-            logging.exception("Failed to get sender name for user_id=%s", sender_id)
-
+        sender_name = await get_sender_name(sender_id, message_obj)
         sender_link = f"[{sender_name}](tg://user?id={sender_id})"
 
         message_link = None
         if chat_username:
-            message_link = f"https://t.me/{chat_username}/{event.id}"
+            message_link = f"https://t.me/{chat_username}/{message_id}"
 
         logging.info(
             "[🔔] Chat: %s | SenderId: %s | Msg: %s",
@@ -483,18 +607,7 @@ async def process_event(event: events.NewMessage.Event) -> None:
 
         recipient = config.get("recipient")
         if isinstance(recipient, int):
-            logging.info(
-                "before send_message_safe +%.3fs",
-                (getnow() - started_at).total_seconds(),
-            )
-
             sent = await send_message_safe(recipient, message)
-
-            logging.info(
-                "after send_message_safe +%.3fs sent=%s",
-                (getnow() - started_at).total_seconds(),
-                sent,
-            )
 
             if sent:
                 logging.info(
@@ -506,9 +619,44 @@ async def process_event(event: events.NewMessage.Event) -> None:
         await add_to_user_cache(sender_id, text)
 
         logging.info(
-            "HANDLER END total=%.3fs",
+            "MESSAGE END source=%s total=%.3fs",
+            source,
             (getnow() - started_at).total_seconds(),
         )
+
+
+async def get_sender_name(sender_id: int, message_obj: object | None) -> str:
+    sender_name = f"user_{sender_id}"
+
+    try:
+        sender = None
+
+        if message_obj is not None and hasattr(message_obj, "get_sender"):
+            sender = await message_obj.get_sender()
+        else:
+            sender = await client.get_entity(sender_id)
+
+        first_name = getattr(sender, "first_name", None)
+        last_name = getattr(sender, "last_name", None)
+
+        full_name = " ".join(x for x in [first_name, last_name] if x)
+
+        if full_name:
+            sender_name = full_name
+
+    except Exception:
+        logging.exception("Failed to get sender name for user_id=%s", sender_id)
+
+    return sender_name            
+
+
+def log_task_exception(task: asyncio.Task) -> None:
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        logging.exception("Unhandled exception in process_event task")
 
 
 async def preload_chats() -> None:
@@ -548,6 +696,9 @@ async def run_bot() -> None:
     asyncio.create_task(heartbeat())
 
     await preload_chats()
+    await initialize_poll_last_seen()
+
+    asyncio.create_task(poll_chats())
 
     now = getnow().strftime("%d-%m-%Y %H:%M:%S")
     logging.info("🧾 Bot run at %s", now)
