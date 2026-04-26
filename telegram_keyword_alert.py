@@ -104,7 +104,7 @@ CONFIGS = [
             "работник",
             "мошенники",
             "мошенника",
-            "правила сообщества"
+            "правила сообщества",
             "сотрудник",
             "дружный коллектив",
             "стабильный график",
@@ -297,7 +297,12 @@ async def handle_transfer_offer(
     rest = raw_text[len(prefix_used):].strip(" :,-")
 
     if not event.is_reply:
-        await event.reply("Команда должна быть ответом на сообщение бота с метаданными")
+        await event.reply("Команда должна быть ответом на сообщение бота с уведомлением")
+        return
+
+    reply_msg = await event.get_reply_message()
+    if reply_msg is None:
+        await event.reply("Не удалось получить сообщение, на которое вы отвечали.")
         return
 
     async with notification_target_lock:
@@ -306,19 +311,6 @@ async def handle_transfer_offer(
     if target_user_id is None:
         await event.reply("Не нашёл пользователя для этого уведомления.")
         return
-    
-    if not target_user_id:
-        await event.reply("Не удалось определить пользователя")
-        return
-
-    reply_text = reply_msg.raw_text or ""
-    match = re.search(r"USER_ID:(\d+)", reply_text)
-
-    if match is None:
-        await event.reply("Не нашёл USER_ID в уведомлении.")
-        return
-
-    target_user_id = int(match.group(1))
 
     if not rest:
         await event.reply("Добавьте описание: например `предложи попутку Бар — Будва`")
