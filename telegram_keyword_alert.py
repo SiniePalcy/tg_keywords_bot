@@ -599,14 +599,18 @@ async def process_message_data(
             raw_text,
         )
 
-        message = (
-            f"Сообщение в чате \"{chat_title}\" от {sender_link} "
-            f"в {msg_time_local.strftime('%H:%M:%S')}:\n\n"
-            f"{raw_text}"
-        )
-
         if message_link:
-            message += f"\n[🔗]({message_link})"
+            message = (
+                f"[Сообщение]({message_link}) в чате \"{chat_title}\" от {sender_link} "
+                f"в {msg_time_local.strftime('%H:%M:%S')}:\n\n"
+                f"{raw_text}"
+            )
+        else:
+            message = (
+                f"Сообщение в чате \"{chat_title}\" от {sender_link} "
+                f"в {msg_time_local.strftime('%H:%M:%S')}:\n\n"
+                f"{raw_text}"
+            )
 
         recipient = config.get("recipient")
         if isinstance(recipient, int):
