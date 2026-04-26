@@ -19,12 +19,13 @@ user_message_cache: dict[int, list[tuple[str, datetime]]] = defaultdict(list)
 last_sent: dict[int, datetime] = {}
 chat_title_cache: dict[int, str] = {}
 chat_username_cache: dict[int, str] = {}
+poll_last_seen: dict[int, int] = {}
+notification_target_cache: dict[int, int] = {}
 
 cache_lock = asyncio.Lock()
 last_sent_lock = asyncio.Lock()
 metrics_lock = asyncio.Lock()
-
-poll_last_seen: dict[int, int] = {}
+notification_target_lock = asyncio.Lock()
 poll_lock = asyncio.Lock()
 
 
@@ -93,16 +94,23 @@ CONFIGS = [
             "сколько",
         ],
         "excluded_keywords": [
+            "каталог",
+            "бот",
+            "спам",
+            "спама",
             "usdt",
             "вакансия",
             "₽",
             "работник",
             "мошенники",
+            "мошенника",
             "правила сообщества"
             "сотрудник",
             "дружный коллектив",
             "стабильный график",
             "свободный график",
+            "гибкий график",
+            "вступайте, знакомьтесь",
             "опыт",
             "рублей",
             "визаран",
@@ -162,9 +170,7 @@ CONFIGS = [
             "ikea",
             "шезлонг",
             "шезлонг-качалка",
-            "качалка",
-            "кроватка",
-            "кроватку"
+            "качалка"
         ],
         "excluded_keywords": [],
         "excluded_senders": [7176393076],
@@ -240,7 +246,7 @@ async def is_semantically_duplicate(user_id: int, text: str) -> bool:
     return False
 
 
-async def send_message_safe(recipient: int, message: str) -> bool:
+async def send_message_safe(recipient: int, message: str, target_user_id: int) -> bool:
     started_at = getnow()
 
     async with last_sent_lock:
@@ -258,12 +264,18 @@ async def send_message_safe(recipient: int, message: str) -> bool:
 
     try:
         logging.info("send_message_safe: sending to %s", recipient)
-        await client.send_message(recipient, message, parse_mode="markdown")
+
+        sent_msg = await client.send_message(recipient, message, parse_mode="markdown")
+
+        async with notification_target_lock:
+            notification_target_cache[sent_msg.id] = target_user_id
 
         logging.info(
-            "send_message_safe: sent to %s in %.3fs",
+            "send_message_safe: sent to %s in %.3fs notification_msg_id=%s target_user_id=%s",
             recipient,
             (getnow() - started_at).total_seconds(),
+            sent_msg.id,
+            target_user_id,
         )
         return True
 
@@ -288,9 +300,15 @@ async def handle_transfer_offer(
         await event.reply("Команда должна быть ответом на сообщение бота с метаданными")
         return
 
-    reply_msg = await event.get_reply_message()
-    if reply_msg is None:
-        await event.reply("Не удалось получить сообщение, на которое вы отвечали.")
+    async with notification_target_lock:
+        target_user_id = notification_target_cache.get(reply_msg.id)
+
+    if target_user_id is None:
+        await event.reply("Не нашёл пользователя для этого уведомления.")
+        return
+    
+    if not target_user_id:
+        await event.reply("Не удалось определить пользователя")
         return
 
     reply_text = reply_msg.raw_text or ""
@@ -596,13 +614,11 @@ async def process_message_data(
         )
 
         if message_link:
-            message += f"\n[Открыть сообщение]({message_link})"
-
-        message += f"\nUSER_ID:{sender_id}"
+            message += f"\n[🔗]({message_link})"
 
         recipient = config.get("recipient")
         if isinstance(recipient, int):
-            sent = await send_message_safe(recipient, message)
+            sent = await send_message_safe(recipient, message, sender_id)
 
             if sent:
                 logging.info(
