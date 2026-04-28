@@ -339,6 +339,15 @@ async def handle_transfer_offer(
         await event.reply("Не получилось отправить сообщение")
 
 
+def log_task_exception(task: asyncio.Task) -> None:
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        logging.exception("Unhandled exception in process_event task")
+
+
 @client.on(events.NewMessage)
 async def handler(event: events.NewMessage.Event) -> None:
     # NewMessage оставляем только для reply-команд:
