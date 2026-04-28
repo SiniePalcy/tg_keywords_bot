@@ -585,7 +585,11 @@ async def process_message_data(
         chat_title = chat_title_cache.get(chat_id, str(chat_id))
         chat_username = chat_username_cache.get(chat_id)
 
-        sender_name = await get_sender_name(sender_id, message_obj)
+        sender_name, is_bot = await get_sender_info(sender_id, message_obj)
+        if is_bot:
+            logging.info("🤖 Игнор сообщения от бота sender_id=%s", sender_id)
+            return
+
         sender_link = f"[{sender_name}](tg://user?id={sender_id})"
 
         message_link = None
@@ -632,16 +636,17 @@ async def process_message_data(
         )
 
 
-async def get_sender_name(sender_id: int, message_obj: object | None) -> str:
+async def get_sender_info(sender_id: int, message_obj: object | None) -> tuple[str, bool]:
     sender_name = f"user_{sender_id}"
+    is_bot = False
 
     try:
-        sender = None
-
         if message_obj is not None and hasattr(message_obj, "get_sender"):
             sender = await message_obj.get_sender()
         else:
             sender = await client.get_entity(sender_id)
+
+        is_bot = bool(getattr(sender, "bot", False))
 
         first_name = getattr(sender, "first_name", None)
         last_name = getattr(sender, "last_name", None)
@@ -652,18 +657,9 @@ async def get_sender_name(sender_id: int, message_obj: object | None) -> str:
             sender_name = full_name
 
     except Exception:
-        logging.exception("Failed to get sender name for user_id=%s", sender_id)
+        logging.exception("Failed to get sender info for user_id=%s", sender_id)
 
-    return sender_name
-
-
-def log_task_exception(task: asyncio.Task) -> None:
-    try:
-        task.result()
-    except asyncio.CancelledError:
-        pass
-    except Exception:
-        logging.exception("Unhandled exception in process_event task")
+    return sender_name, is_bot
 
 
 async def preload_chats() -> None:
