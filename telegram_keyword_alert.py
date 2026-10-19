@@ -51,13 +51,13 @@ openAIclient = openai.AsyncOpenAI()
 ENABLE_SEMANTIC_FILTER = os.getenv("ENABLE_SEMANTIC_FILTER", "False").lower() == "true"
 
 DELAY_TOO_MANY_REQUESTS = 30
-MIN_SECONDS_BETWEEN_NOTIFICATIONS = int(os.getenv("MIN_SECONDS_BETWEEN_NOTIFICATIONS", "3"))
+MIN_SECONDS_BETWEEN_NOTIFICATIONS = int(os.getenv("MIN_SECONDS_BETWEEN_NOTIFICATIONS", "2"))
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TRANSFER_IMAGE_PATH = os.path.join(BASE_DIR, "transfer.jpg")
 SEQ_URL = os.getenv("SEQ_URL")
 
-POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "10"))
+POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "4"))
 POLL_LIMIT = int(os.getenv("POLL_LIMIT", "50"))
 
 if SEQ_URL:
@@ -169,7 +169,7 @@ CONFIGS = [
             -1001609324023,
             -1001860403939,
             -1001201487135,
-            -1001516998638 # kids_montenegro Детская Барахолка Черногория
+            -1001516998638  # kids_montenegro Детская Барахолка Черногория
         },
         "keywords": [
             "кроватка",
